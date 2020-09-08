@@ -1,14 +1,14 @@
 use std::collections::HashMap;
-use std::ops::{Add, Sub, Range};
+use std::ops::Range;
 
-pub fn calculate_score(
+pub fn calculate_score_with_string(
     pattern: String,
     e: i32,
     x: i32,
     loc: i32,
     distance: i32) -> f64 {
-        calculate_score_with_length(
-            pattern.len() as u32,
+        calculate_score(
+            pattern.len(),
             e,
             x,
             loc,
@@ -16,8 +16,8 @@ pub fn calculate_score(
         )
 }
 
-pub fn calculate_score_with_length(
-    pattern_length: u32,
+pub fn calculate_score(
+    pattern_length: usize,
     e: i32,
     x: i32,
     loc: i32,
