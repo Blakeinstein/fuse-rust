@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 pub struct FuseProperty {
-    name: String,
-    weight: f64,
+    pub name: String,
+    pub weight: f64,
 }
 
 impl FuseProperty {
@@ -23,10 +23,6 @@ impl FuseProperty {
     }
 }
 
-pub trait Fuseable {
-    fn properties() -> vec![FuseProperty];
-}
-
 pub struct Pattern{
     text: String,
     len: usize,
@@ -35,26 +31,26 @@ pub struct Pattern{
 }
     
 pub struct SearchResult {
-    index: usize,
+    pub index: usize,
+    pub score: f64,
+    pub ranges: Vec<Range<u32>>,
+}
+
+pub struct ScoreResult {
     score: f64,
     ranges: Vec<Range<u32>>,
 }
 
-struct ScoreResult {
-    score: f64,
-    ranges: Vec<Range<u32>>,
-}
-
-struct FResult {
-    key: String,
-    score: f64,
-    ranges: [Range<u32>],
+pub struct FResult {
+    pub key: String,
+    pub score: f64,
+    pub ranges: [Range<u32>],
 }
 
 pub struct FusableSearchResult {
-    index: i32,
-    score: f64,
-    results: FResult,
+    pub index: i32,
+    pub score: f64,
+    pub results: FResult,
 }
 
 pub struct Fuse {
@@ -81,18 +77,20 @@ impl std::default::Default for Fuse {
 
 impl Fuse {
     pub fn create_pattern(&self, string: &str) -> Option<Pattern> {
-        let pattern = if self.is_case_sensitive { string } else { &string.to_lowercase() };
+        let lowercase = string.to_lowercase();
+        let pattern = if self.is_case_sensitive { string } else { &lowercase };
         let len = pattern.len();
 
         if len == 0 {
             println!("Cannot create pattern, input string empty");
             None
         } else {
+            let alphabet = utils::calculate_pattern_alphabet(&pattern);
             let new_pattern = Pattern{
                 text: String::from(pattern),
                 len: len,
                 mask: 1 << (len - 1),
-                alphabet: utils::calculate_pattern_alphabet(&pattern),
+                alphabet: alphabet,
             };
             Some(new_pattern)
         }
@@ -101,11 +99,11 @@ impl Fuse {
 
     fn search_util(
         &self,
-        pattern: Pattern,
+        pattern: &Pattern,
         string: &str) -> ScoreResult {
-            if self.is_case_sensitive {
-                let string = string.to_ascii_lowercase();
-            }
+            let string = if self.is_case_sensitive {
+                string.to_ascii_lowercase()
+            } else { String::from(string) };
 
             let text_length = string.len();
 
@@ -121,15 +119,15 @@ impl Fuse {
             let distance = self.distance;
             let mut threshold = self.threshold;
 
-            let best_location = string.find(&pattern.text).unwrap_or(0 as usize);
+            let mut best_location = string.find(&pattern.text).unwrap_or(0 as usize);
 
             let mut match_mask_arr = vec![0; text_length];
 
-            let index = string[
+            let mut index = string[
                     best_location..
                 ].find(&pattern.text);
 
-            let score;
+            let mut score;
             
             while index.is_some() {
                 let i = index.unwrap();
@@ -154,17 +152,15 @@ impl Fuse {
                 };
             }
 
-            best_location = 0;
-
             score = 1.;
-            let bin_max = pattern.len + text_length;
-            let last_bit_arr = vec!();
+            let mut bin_max = pattern.len + text_length;
+            let mut last_bit_arr = vec!();
 
             let text_count = string.len();
 
             for i in 0..pattern.len {
-                let bin_min = 0;
-                let bin_mid = bin_max;
+                let mut bin_min = 0;
+                let mut bin_mid = bin_max;
 
                 while bin_min < bin_max {
                     if utils::calculate_score(
@@ -189,13 +185,13 @@ impl Fuse {
                     continue;
                 };
 
-                let current_location_index: usize = 0;
+                let mut current_location_index: usize = 0;
 
                 for j in (start as u32..finish as u32).rev() {
                     let current_location: usize = (j - 1) as usize;
 
                     let char_match: u32 = {
-                        let result;
+                        let mut result = None;
                         if current_location < text_count {
                             current_location_index = {
                                 if current_location == 0 {
@@ -234,11 +230,9 @@ impl Fuse {
                             threshold = score;
                             best_location = current_location;
 
-                            if best_location as i32 > location {
-                                start = 1.max(2*location - best_location as i32) as usize;
-                            } else {
+                            if best_location as i32 <= location {
                                 break;
-                            }
+                            };
                         }
                     }
                 }
@@ -264,7 +258,7 @@ impl Fuse {
 
     pub fn search(
         &self,
-        pattern: Option<Pattern>,
+        pattern: Option<&Pattern>,
         string: &str
     ) -> Option<ScoreResult> {
         let pattern = pattern?;
@@ -274,12 +268,12 @@ impl Fuse {
                 |x| self.create_pattern(x)
             );
 
-            let full_pattern_result = self.search_util(pattern, string);
+            let full_pattern_result = self.search_util(&pattern, string);
 
-            let (length, results) = word_patterns.fold((0, full_pattern_result), |(n, total_result), pattern| {
-                let result = self.search_util(pattern, string);
+            let (length, results) = word_patterns.fold((0, full_pattern_result), |(n, mut total_result), pattern| {
+                let result = self.search_util(&pattern, string);
                 total_result.score += result.score;
-                total_result.ranges.append(&mut result.ranges);
+                total_result.ranges.append(&mut result.ranges.clone());
                 (n+1, total_result)
             });
 
@@ -291,16 +285,20 @@ impl Fuse {
             return if averaged_result.score == 1. {None} else {Some(averaged_result)};
 
         } else {
-            let result = self.search_util(pattern, string);
+            let result = self.search_util(&pattern, string);
 
             return if result.score == 1. {None} else {Some(result)};
         }
     }
 }
 
+pub trait Fuseable {
+    fn properties() -> Vec<FuseProperty> ;
+}
+
 impl Fuse {
     pub fn search_text_in_string(&self, text: &str, astring: &str) -> Option<ScoreResult>{
-        self.search(self.create_pattern(text), astring)
+        self.search(self.create_pattern(text).as_ref(), astring)
     }
 
     pub fn search_text_in_iterable<'a, It>(&self, text: &str, list: It) -> Vec<SearchResult>
@@ -309,10 +307,10 @@ impl Fuse {
         It::Item: AsRef<str>
     {
         let pattern = self.create_pattern(text);
-        let items = vec!();
+        let mut items = vec!();
         
         for (index, item) in list.into_iter().enumerate() {
-            if let Some(result) = self.search(pattern, item.as_ref()) {
+            if let Some(result) = self.search(pattern.as_ref(), item.as_ref()) {
                 items.push(
                     SearchResult {
                         index: index,

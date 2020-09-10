@@ -36,7 +36,7 @@ pub fn calculate_score(
 /// - Returns: Hash of character locations.
 pub fn calculate_pattern_alphabet(pattern: &str) -> HashMap<char, u32> {
     let len = pattern.len();
-    let mask = HashMap::new();
+    let mut mask = HashMap::new();
     for (i, c) in pattern.chars().enumerate() {
         mask.insert(c, mask.get(&c).unwrap_or(&0) | (1 << (len -i -1)));
     }
@@ -56,8 +56,8 @@ pub fn find_ranges(mask: &[u8]) -> Result<Vec<Range<u32>>, String> {
     if mask.is_empty() {
         return Err(String::from("Input array is empty"));
     }
-    let ranges = vec!();
-    let start: i32 = -1;
+    let mut ranges = vec!();
+    let mut start: i32 = -1;
     for (n, bit) in mask.iter().enumerate() {
         if start == -1 && *bit >= 1{
             start = n as i32;
