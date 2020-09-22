@@ -2,6 +2,8 @@ mod utils;
 
 use std::collections::HashMap;
 use std::ops::Range;
+use std::sync::{ Arc, Mutex};
+use std::thread;
 
 pub struct FuseProperty {
     pub name: String,
@@ -29,13 +31,15 @@ pub struct Pattern{
     mask: u32,
     alphabet: HashMap<char, u32>,
 }
-    
+
+#[derive(Debug)]
 pub struct SearchResult {
     pub index: usize,
     pub score: f64,
     pub ranges: Vec<Range<u32>>,
 }
 
+#[derive(Debug)]
 pub struct ScoreResult {
     score: f64,
     ranges: Vec<Range<u32>>,
@@ -54,12 +58,12 @@ pub struct FusableSearchResult {
 }
 
 pub struct Fuse {
-    location: i32,
-    distance: i32,
-    threshold: f64,
-    max_pattern_length: i32,
-    is_case_sensitive: bool,
-    tokenize: bool,
+    pub location: i32,
+    pub distance: i32,
+    pub threshold: f64,
+    pub max_pattern_length: i32,
+    pub is_case_sensitive: bool,
+    pub tokenize: bool,
 }
 
 impl std::default::Default for Fuse {
@@ -157,24 +161,25 @@ impl Fuse {
             let mut last_bit_arr = vec!();
 
             let text_count = string.len();
-
+            
             for i in 0..pattern.len {
+                
+                dbg!(i);
                 let mut bin_min = 0;
                 let mut bin_mid = bin_max;
 
-                while bin_min < bin_max {
+                while bin_min < bin_mid {
                     if utils::calculate_score(
-                        pattern.len, i as i32, location as i32, location + bin_mid as i32, distance) <= threshold {
+                        pattern.len, i as i32, location, location + bin_mid as i32, distance) <= threshold {
                             bin_min = bin_mid;
                     } else {
                         bin_max = bin_mid;
                     }
                     bin_mid = ((bin_max - bin_min) / 2) + bin_min;
                 }
-
                 bin_max = bin_mid;
 
-                let start = 1_usize.max(location as usize - bin_mid + 1);
+                let start = 1.max(location - bin_mid as i32 + 1) as usize;
                 let finish = text_length.min(location as usize + bin_mid) + pattern.len;
 
                 let mut bit_arr = vec!(0; finish + 2);
@@ -189,17 +194,10 @@ impl Fuse {
 
                 for j in (start as u32..finish as u32).rev() {
                     let current_location: usize = (j - 1) as usize;
-
                     let char_match: u32 = {
                         let mut result = None;
                         if current_location < text_count {
-                            current_location_index = {
-                                if current_location == 0 {
-                                    current_location
-                                } else {
-                                    current_location_index - 1
-                                }
-                            };
+                            current_location_index = current_location_index.checked_sub(1).unwrap_or(current_location);
                             result = pattern.alphabet.get(
                                 &string.chars().nth(current_location_index).unwrap()
                             );  
@@ -236,7 +234,6 @@ impl Fuse {
                         }
                     }
                 }
-
                 if utils::calculate_score(
                     pattern.len,
                     i as i32 + 1,
@@ -301,7 +298,7 @@ impl Fuse {
         self.search(self.create_pattern(text).as_ref(), astring)
     }
 
-    pub fn search_text_in_iterable<'a, It>(&self, text: &str, list: It) -> Vec<SearchResult>
+    pub fn search_text_in_iterable<It>(&self, text: &str, list: It) -> Vec<SearchResult>
     where 
         It: IntoIterator,
         It::Item: AsRef<str>
@@ -322,5 +319,47 @@ impl Fuse {
         }
         items.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
         items
+    }
+
+    pub fn search_text_in_string_list(&'static self, text: &str, list: &'static[&str], chunk_size: usize, completion: &dyn Fn(Vec<SearchResult>)){
+        let pattern = Arc::new(self.create_pattern(text));
+        
+        let item_queue = Arc::new(Mutex::new(Some(vec!())));
+        let count = list.len();
+        let mut handles = vec!();
+        
+        (0..=count).step_by(chunk_size).for_each(|offset| {
+            let chunk = &list[offset..std::cmp::min(offset + chunk_size, count)];
+            let queue_ref = Arc::clone(&item_queue);
+            let pattern_ref = Arc::clone(&pattern);
+            handles.push(thread::spawn(move|| {
+                let mut chunk_items = vec!() ;
+                
+                for (index, item) in chunk.into_iter().enumerate() {
+                    if let Some(result) = self.search((*pattern_ref).as_ref(), item) {
+                        chunk_items.push(
+                            SearchResult {
+                                index: offset + index,
+                                score: result.score,
+                                ranges: result.ranges,
+                            }
+                        );
+                    }
+                }
+
+                let mut inner_ref = queue_ref.lock().unwrap();
+                if let Some(item_queue) = inner_ref.as_mut() {
+                    item_queue.append(&mut chunk_items);
+                }
+            }));
+        });
+
+        for handle in handles {
+            handle.join().unwrap_or_default();
+        }
+
+        let mut items = Arc::try_unwrap(item_queue).ok().unwrap().into_inner().unwrap().unwrap();
+        items.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+        completion(items);
     }
 }
