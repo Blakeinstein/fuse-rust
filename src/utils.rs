@@ -52,7 +52,7 @@ pub fn calculate_pattern_alphabet(pattern: &str) -> HashMap<char, u32> {
 /// - Parameter mask: A string representing the value to search for.
 ///
 /// - Returns: `CountableClosedRange<Int>` array.
-pub fn find_ranges(mask: &[u8]) -> Result<Vec<Range<u32>>, String> {
+pub fn find_ranges(mask: &[u8]) -> Result<Vec<Range<usize>>, String> {
     if mask.is_empty() {
         return Err(String::from("Input array is empty"));
     }
@@ -62,13 +62,13 @@ pub fn find_ranges(mask: &[u8]) -> Result<Vec<Range<u32>>, String> {
         if start == -1 && *bit >= 1{
             start = n as i32;
         } else if start != -1 && *bit == 0 {
-            ranges.push(start as u32..n as u32);
+            ranges.push(start as usize..n);
             start = -1;
         }
     }
 
     if *mask.last().unwrap() == 1 {
-        ranges.push(start as u32..mask.len() as u32)
+        ranges.push(start as usize..mask.len())
     }
     Ok(ranges)
 }

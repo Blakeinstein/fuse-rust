@@ -36,19 +36,19 @@ pub struct Pattern{
 pub struct SearchResult {
     pub index: usize,
     pub score: f64,
-    pub ranges: Vec<Range<u32>>,
+    pub ranges: Vec<Range<usize>>,
 }
 
 #[derive(Debug)]
 pub struct ScoreResult {
-    score: f64,
-    ranges: Vec<Range<u32>>,
+    pub score: f64,
+    pub ranges: Vec<Range<usize>>,
 }
 
 pub struct FResult {
     pub key: String,
     pub score: f64,
-    pub ranges: [Range<u32>],
+    pub ranges: Vec<Range<usize>>,
 }
 
 pub struct FusableSearchResult {
@@ -115,7 +115,7 @@ impl Fuse {
             if pattern.text == string {
                 return ScoreResult {
                     score: 0.,
-                    ranges: vec![0..text_length as u32 - 1]
+                    ranges: vec![0..text_length as usize]
                 };
             }
 
@@ -134,7 +134,7 @@ impl Fuse {
             let mut score;
             
             while index.is_some() {
-                let i = index.unwrap();
+                let i = best_location + index.unwrap();
                 score = utils::calculate_score(
                     pattern.len,
                     0,
@@ -163,11 +163,8 @@ impl Fuse {
             let text_count = string.len();
             
             for i in 0..pattern.len {
-                
-                dbg!(i);
                 let mut bin_min = 0;
                 let mut bin_mid = bin_max;
-
                 while bin_min < bin_mid {
                     if utils::calculate_score(
                         pattern.len, i as i32, location, location + bin_mid as i32, distance) <= threshold {
@@ -192,7 +189,7 @@ impl Fuse {
 
                 let mut current_location_index: usize = 0;
 
-                for j in (start as u32..finish as u32).rev() {
+                for j in (start as u32..=finish as u32).rev() {
                     let current_location: usize = (j - 1) as usize;
                     let char_match: u32 = {
                         let mut result = None;
@@ -208,7 +205,7 @@ impl Fuse {
                     if char_match != 0 {
                         match_mask_arr[current_location] = 1;
                     }
-
+                    
                     let j2 = j as usize;
                     bit_arr[j2] = ((bit_arr[j2+1] << 1) | 1) & char_match;
                     if i > 0 {
@@ -247,6 +244,7 @@ impl Fuse {
                 last_bit_arr = bit_arr.clone();
             };
 
+            // dbg!(score, &match_mask_arr);
             ScoreResult {
                 score: score,
                 ranges: utils::find_ranges(&match_mask_arr).unwrap(),
@@ -283,7 +281,6 @@ impl Fuse {
 
         } else {
             let result = self.search_util(&pattern, string);
-
             return if result.score == 1. {None} else {Some(result)};
         }
     }
