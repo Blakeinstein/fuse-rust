@@ -3,7 +3,7 @@ mod utils;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::{ Arc, Mutex};
-use std::thread;
+use crossbeam::thread;
 
 pub struct FuseProperty {
     pub name: String,
@@ -11,16 +11,16 @@ pub struct FuseProperty {
 }
 
 impl FuseProperty {
-    pub fn init(name: String) -> Self{
+    pub fn init(name: &str) -> Self{
         Self{
-            name: name, 
-            weight: 1.0
+            name: String::from(name), 
+            weight: 1.0,
         }
     }
-    pub fn init_with_weight(name: String, weight: f64) -> Self{
+    pub fn init_with_weight(name: &str, weight: f64) -> Self{
         Self{
-            name,
-            weight
+            name: String::from(name),
+            weight: weight,
         }
     }
 }
@@ -319,42 +319,39 @@ impl Fuse {
         items
     }
 
-    pub fn search_text_in_string_list(&'static self, text: &str, list: &'static[&str], chunk_size: usize, completion: &dyn Fn(Vec<SearchResult>)){
+    pub fn search_text_in_string_list(&self, text: &str, list: &[&str], chunk_size: usize, completion: &dyn Fn(Vec<SearchResult>)){
         let pattern = Arc::new(self.create_pattern(text));
         
         let item_queue = Arc::new(Mutex::new(Some(vec!())));
         let count = list.len();
-        let mut handles = vec!();
         
-        (0..=count).step_by(chunk_size).for_each(|offset| {
-            let chunk = &list[offset..std::cmp::min(offset + chunk_size, count)];
-            let queue_ref = Arc::clone(&item_queue);
-            let pattern_ref = Arc::clone(&pattern);
-            handles.push(thread::spawn(move|| {
-                let mut chunk_items = vec!() ;
-                
-                for (index, item) in chunk.into_iter().enumerate() {
-                    if let Some(result) = self.search((*pattern_ref).as_ref(), item) {
-                        chunk_items.push(
-                            SearchResult {
-                                index: offset + index,
-                                score: result.score,
-                                ranges: result.ranges,
-                            }
-                        );
+        thread::scope(|scope| {
+            (0..=count).step_by(chunk_size).for_each(|offset| {
+                let chunk = &list[offset..count.min(offset + chunk_size)];
+                let queue_ref = Arc::clone(&item_queue);
+                let pattern_ref = Arc::clone(&pattern);
+                scope.spawn(move|_| {
+                    let mut chunk_items = vec!() ;
+                    
+                    for (index, item) in chunk.into_iter().enumerate() {
+                        if let Some(result) = self.search((*pattern_ref).as_ref(), item) {
+                            chunk_items.push(
+                                SearchResult {
+                                    index: offset + index,
+                                    score: result.score,
+                                    ranges: result.ranges,
+                                }
+                            );
+                        }
                     }
-                }
 
-                let mut inner_ref = queue_ref.lock().unwrap();
-                if let Some(item_queue) = inner_ref.as_mut() {
-                    item_queue.append(&mut chunk_items);
-                }
-            }));
-        });
-
-        for handle in handles {
-            handle.join().unwrap_or_default();
-        }
+                    let mut inner_ref = queue_ref.lock().unwrap();
+                    if let Some(item_queue) = inner_ref.as_mut() {
+                        item_queue.append(&mut chunk_items);
+                    }
+                });
+            });
+        }).unwrap();
 
         let mut items = Arc::try_unwrap(item_queue).ok().unwrap().into_inner().unwrap().unwrap();
         items.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
