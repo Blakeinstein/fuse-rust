@@ -106,9 +106,11 @@ impl Fuse {
         pattern: &Pattern,
         string: &str) -> ScoreResult {
             let string = if self.is_case_sensitive {
+                String::from(string)
+            } else {
                 string.to_ascii_lowercase()
-            } else { String::from(string) };
-
+            };
+            let string_chars = string.chars().collect::<Vec<_>>();
             let text_length = string.len();
 
             // Exact match
@@ -196,8 +198,8 @@ impl Fuse {
                         if current_location < text_count {
                             current_location_index = current_location_index.checked_sub(1).unwrap_or(current_location);
                             result = pattern.alphabet.get(
-                                &string.chars().nth(current_location_index).unwrap()
-                            );  
+                                &string_chars[current_location_index]
+                            );
                         }
                         *result.unwrap_or(&0)
                     };
@@ -244,7 +246,6 @@ impl Fuse {
                 last_bit_arr = bit_arr.clone();
             };
 
-            // dbg!(score, &match_mask_arr);
             ScoreResult {
                 score: score,
                 ranges: utils::find_ranges(&match_mask_arr).unwrap(),

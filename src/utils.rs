@@ -22,6 +22,7 @@ pub fn calculate_score(
     x: i32,
     loc: i32,
     distance: i32) -> f64 {
+    
     let accuracy = (e as f64) / (pattern_length as f64);
     let proximity = (x - loc).abs();
     if distance == 0 {
