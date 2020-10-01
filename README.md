@@ -3,6 +3,8 @@
 ## What is Fuse?
 Fuse is a super lightweight library which provides a simple way to do fuzzy searching.
 
+Fuse-RS is a port of https://github.com/krisk/fuse-swift written purely in rust.
+
 ## Usage
 
 #### Example 1
