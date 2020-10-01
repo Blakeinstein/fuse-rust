@@ -7,11 +7,19 @@ struct Book<'a> {
 }
 
 impl Fuseable for Book<'_>{
-    fn properties() -> Vec<FuseProperty> {
+    fn properties(&self) -> Vec<FuseProperty> {
         return vec!(
-            FuseProperty{name: String::from("title"), weight: 0.3},
-            FuseProperty{name: String::from("author"), weight: 0.7},
+            FuseProperty{value: String::from("title"), weight: 0.3},
+            FuseProperty{value: String::from("author"), weight: 0.7},
         )
+    }
+
+    fn lookup(&self, key: &str) -> Option<&str> {
+        return match key {
+            "title" => Some(self.title),
+            "author" => Some(self.author),
+            _ => None
+        }
     }
 }
 fn main() {    
@@ -21,13 +29,14 @@ fn main() {
     ];
     
     let fuse = Fuse::default();
-    // let results = fuse.search("man", in: books);
+    let results = fuse.search_text_in_fuse_list("man", &books);
     
-    // results.forEach { item in
-    //     print("index: " + item.index)
-    //     print("score: " + item.score)
-    //     print("results: " + item.results)
-    //     print("---------------")
-    // }
-    dbg!(books);
+    results.iter().for_each(|result| 
+        println!(r#"
+            index: {}
+            score: {}
+            results: {:?}
+            ---------------
+        "#, result.index, result.score, result.results)
+    );
 }
