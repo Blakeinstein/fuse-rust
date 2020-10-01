@@ -13,4 +13,6 @@ fn main() {
         let result = fuse.search(search_pattern.as_ref(), &item);
         dbg!(result);
     });
+    // let results = fuse.search_text_in_iterable("Te silm", books.iter());
+    // dbg!(results);
 }
