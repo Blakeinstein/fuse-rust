@@ -6,20 +6,20 @@ use std::sync::{ Arc, Mutex};
 use crossbeam::thread;
 
 pub struct FuseProperty {
-    pub name: String,
+    pub value: String,
     pub weight: f64,
 }
 
 impl FuseProperty {
-    pub fn init(name: &str) -> Self{
+    pub fn init(value: &str) -> Self{
         Self{
-            name: String::from(name), 
+            value: String::from(value), 
             weight: 1.0,
         }
     }
-    pub fn init_with_weight(name: &str, weight: f64) -> Self{
+    pub fn init_with_weight(value: &str, weight: f64) -> Self{
         Self{
-            name: String::from(name),
+            value: String::from(value),
             weight: weight,
         }
     }
@@ -45,16 +45,18 @@ pub struct ScoreResult {
     pub ranges: Vec<Range<usize>>,
 }
 
+#[derive(Debug)]
 pub struct FResult {
-    pub key: String,
+    pub value: String,
     pub score: f64,
     pub ranges: Vec<Range<usize>>,
 }
 
+#[derive(Debug)]
 pub struct FusableSearchResult {
-    pub index: i32,
+    pub index: usize,
     pub score: f64,
-    pub results: FResult,
+    pub results: Vec<FResult>,
 }
 
 pub struct Fuse {
@@ -288,7 +290,8 @@ impl Fuse {
 }
 
 pub trait Fuseable {
-    fn properties() -> Vec<FuseProperty> ;
+    fn properties(&self) -> Vec<FuseProperty> ;
+    fn lookup(&self, key: &str) -> Option<&str> ;
 }
 
 impl Fuse {
@@ -343,6 +346,114 @@ impl Fuse {
                                 }
                             );
                         }
+                    }
+
+                    let mut inner_ref = queue_ref.lock().unwrap();
+                    if let Some(item_queue) = inner_ref.as_mut() {
+                        item_queue.append(&mut chunk_items);
+                    }
+                });
+            });
+        }).unwrap();
+
+        let mut items = Arc::try_unwrap(item_queue).ok().unwrap().into_inner().unwrap().unwrap();
+        items.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+        completion(items);
+    }
+
+    pub fn search_text_in_fuse_list(&self, text: &str, list: &[impl Fuseable]) -> Vec<FusableSearchResult> {
+        let pattern = self.create_pattern(text);
+        let mut result = vec!();
+        for (index, item) in list.iter().enumerate() {
+            let mut scores = vec!();
+            let mut total_score = 0.0;
+
+            let mut property_results = vec!();
+            item.properties().iter().for_each(|property| {
+                let value = item.lookup(&property.value).unwrap_or_else(|| {
+                    println!("Lookup doesnt contain requested value => {}.", &property.value);
+                    ""
+                });
+                if let Some(result) = self.search(pattern.as_ref(), &value) {
+                    let weight = if property.weight == 1.0 { 1.0 } else { 1.0 - property.weight };
+                    let score = if result.score == 0.0 && weight == 1.0 { 0.001 } else { result.score } * weight;
+                    total_score += score;
+                    
+                    scores.push(score);
+
+                    property_results.push(FResult{
+                        value: String::from(&property.value),
+                        score: score,
+                        ranges: result.ranges
+                    });
+                }
+            });
+            if scores.is_empty() {
+                continue;
+            }
+
+            let count = scores.len() as f64;
+            result.push(FusableSearchResult{
+                index: index,
+                score: total_score / count,
+                results: property_results,
+            })
+        };
+
+        result.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+        return result;
+    }
+    pub fn search_text_in_fuse_list_with_chunk_size<T>(&self, text: &str, list: &[T], chunk_size: usize, completion: &dyn Fn(Vec<FusableSearchResult>))
+    where T:Fuseable + std::marker::Sync{
+        let pattern = Arc::new(self.create_pattern(text));
+        
+        let item_queue = Arc::new(Mutex::new(Some(vec!())));
+        let count = list.len();
+        
+        thread::scope(|scope| {
+            (0..=count).step_by(chunk_size).for_each(|offset| {
+                let chunk = &list[offset..count.min(offset + chunk_size)];
+                let queue_ref = Arc::clone(&item_queue);
+                let pattern_ref = Arc::clone(&pattern);
+                scope.spawn(move|_| {
+                    let mut chunk_items = vec!() ;
+                    
+                    for (index, item) in chunk.into_iter().enumerate() {
+                        let mut scores = vec!();
+                        let mut total_score = 0.0;
+
+                        let mut property_results = vec!();
+                        item.properties().iter().for_each(|property| {
+                            let value = item.lookup(&property.value).unwrap_or_else(|| {
+                                println!("Lookup doesnt contain requested value => {}.", &property.value);
+                                ""
+                            });
+                            if let Some(result) = self.search((*pattern_ref).as_ref(), &value) {
+                                let weight = if property.weight == 1.0 { 1.0 } else { 1.0 - property.weight };
+                                // let score = if result.score == 0.0 && weight == 1.0 { 0.001 } else { result.score } * weight;
+                                let score = result.score * weight;
+                                total_score += score;
+                                
+                                scores.push(score);
+
+                                property_results.push(FResult{
+                                    value: String::from(&property.value),
+                                    score: score,
+                                    ranges: result.ranges
+                                });
+                            }
+                        });
+                        
+                        if scores.is_empty() {
+                            continue;
+                        }
+            
+                        let count = scores.len() as f64;
+                        chunk_items.push(FusableSearchResult{
+                            index: index,
+                            score: total_score / count,
+                            results: property_results,
+                        })
                     }
 
                     let mut inner_ref = queue_ref.lock().unwrap();
