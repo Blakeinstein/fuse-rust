@@ -1,8 +1,9 @@
 #![warn(missing_docs)]
 
 //! Fuse-RS
+//! 
 //! A super lightweight fuzzy-search library.
-//! A port of Fuze-Swift written purely in rust!.
+//! A port of [Fuse-Swift](https://github.com/krisk/fuse-swift) written purely in rust!
 
 mod utils;
 
