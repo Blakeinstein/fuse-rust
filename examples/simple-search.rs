@@ -1,4 +1,4 @@
-use fuse_rs::{ Fuse, ScoreResult};
+use fuse_rust::{ Fuse, ScoreResult};
 
 fn main() {
     let fuse = Fuse::default();

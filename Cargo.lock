@@ -85,7 +85,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "fuse-rs"
+name = "fuse-rust"
 version = "0.1.0"
 dependencies = [
  "crossbeam",

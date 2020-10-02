@@ -1,4 +1,4 @@
-use fuse_rs::{ Fuse, SearchResult };
+use fuse_rust::{ Fuse, SearchResult };
 
 fn main() {
     let fuse = Fuse::default();

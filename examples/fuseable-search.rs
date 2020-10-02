@@ -1,4 +1,4 @@
-use fuse_rs::{ Fuse, Fuseable, FuseProperty, FResult, FusableSearchResult };
+use fuse_rust::{ Fuse, Fuseable, FuseProperty, FResult, FusableSearchResult };
 
 #[derive(Debug)]
 struct Book<'a> {
