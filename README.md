@@ -1,7 +1,7 @@
 <h1 align="center">Fuse-rust</h1>
 <p align="center">
     <a href="https://crates.io/crates/fuse-rust"><img src="https://img.shields.io/crates/v/fuse-rust.svg"/></a>
-    <img src="https://github.com/Blakeinstein/fuse-rust/workflows/Rust/badge.svg" />
+    <img src="https://github.com/Blakeinstein/fuse-rust/workflows/Rust/badge.svg?branch=release" />
 </p>
 
 ## What is Fuse?
