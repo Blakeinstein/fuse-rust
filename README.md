@@ -1,4 +1,4 @@
-<h1 align="center">Fuse-RS</h1>
+<h1 align="center">Fuse-rust</h1>
 <p align="center">
     <a href="https://crates.io/crates/fuse-rust"><img src="https://img.shields.io/crates/v/fuse-rust.svg"/></a>
     <img src="https://github.com/Blakeinstein/fuse-rust/workflows/Rust/badge.svg" />
@@ -15,7 +15,7 @@ Fuse-RS is a port of https://github.com/krisk/fuse-swift written purely in rust.
 
 The first step is to create a fuse object, with the necessary parameters. Fuse::default, returns the following parameters.
 ```rust
-Fuse::Default() = Fuse{
+Fuse::default() = Fuse{
     location: 0, // Approx where to start looking for the pattern
     distance: 100, // Maximum distance the score should scale to
     threshold: 0.6, // A threshold for guess work
