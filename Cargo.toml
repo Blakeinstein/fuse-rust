@@ -3,7 +3,18 @@ name = "fuse-rs"
 version = "0.1.0"
 authors = ["Blaine <rishi1998@gmail.com>"]
 edition = "2018"
-
+license = "MIT"
+license-file = "LICENSE"
+readme = "README.md"
+documentation = "https://docs.rs/fuse-rs"
+repository = "https://github.com/Blakeinstein/fuse-rs"
+homepage = "https://github.com/Blakeinstein/fuse-rs"
+categories = ["algorithms", "text-processing", "gui"]
+keywords = ["weighted-search", "search", "bitap", "fuzzy-search", "fuzzy-matching"]
+description = """
+Fuse is a super lightweight library which provides a simple way to do fuzzy searching.
+Fuse-RS is a port of Fuse-Swift, written purely in rust.
+"""
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
