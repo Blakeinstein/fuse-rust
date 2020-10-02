@@ -1,22 +1,59 @@
+#![warn(missing_docs)]
+
+//! Fuse-RS
+//! A super lightweight fuzzy-search library.
+//! A port of Fuze-Swift written purely in rust!.
+
 mod utils;
 
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::{ Arc, Mutex};
+/// Required for scoped threads
 use crossbeam::thread;
 
+/// Defines the fuseproperty object to be returned as part of the list
+/// returned by properties() implemented by the Fuseable trait. 
+/// # Examples: 
+/// Basic Usage: 
+/// ```
+/// struct Book<'a> {
+///     title: &'a str,
+///     author: &'a str,
+/// }
+/// 
+/// impl Fuseable for Book {
+///     fn properties(&self) -> Vec<FuseableProperty> {
+///         return vec!(
+///             FuseProperty{value: String::from("title"), weight: 0.3},
+///             FuseProperty{value: String::from("author"), weight: 0.7},
+///         )
+///     }
+///     fn lookup(&self, key: &str) -> Option<&str> {
+///         return match key {
+///             "title" => Some(self.title),
+///             "author" => Some(self.author),
+///             _ => None
+///         }
+///     }
+/// }
+/// ```
 pub struct FuseProperty {
+    /// The name of the field with an associated weight in the search.
     pub value: String,
+    /// The weight associated with the specified field.
     pub weight: f64,
 }
 
 impl FuseProperty {
+    /// create a fuse property with weight 1.0 and a string reference.
     pub fn init(value: &str) -> Self{
         Self{
             value: String::from(value), 
             weight: 1.0,
         }
     }
+    /// create a fuse property with a specified weight and string reference.
     pub fn init_with_weight(value: &str, weight: f64) -> Self{
         Self{
             value: String::from(value),
@@ -25,6 +62,15 @@ impl FuseProperty {
     }
 }
 
+/// A datatype to store the pattern's text, its length, a mask 
+/// and a hashmap against each alphabet in the text. 
+/// Always use fuse.create_pattern("search string") to create a pattern
+/// # Examples: 
+/// Basic usage: 
+/// ```
+/// let fuse = Fuse::default();
+/// let pattern = fuse.create_pattern("Hello");
+/// ```
 pub struct Pattern{
     text: String,
     len: usize,
@@ -32,39 +78,75 @@ pub struct Pattern{
     alphabet: HashMap<char, u32>,
 }
 
+/// Return type for performing a search on a list of strings
 #[derive(Debug, PartialEq)]
 pub struct SearchResult {
+    /// corresponding index of the search result in the original list
     pub index: usize,
+    /// Search rating of the search result, 0.0 is a perfect match 1.0 is a perfect mismatch
     pub score: f64,
+    /// Ranges of matches in the search query, useful if you want to hightlight matches.
     pub ranges: Vec<Range<usize>>,
 }
 
+/// Return type for performing a search on a single string.
 #[derive(Debug, PartialEq)]
 pub struct ScoreResult {
+    /// Search rating of the search result, 0.0 is a perfect match 1.0 is a perfect mismatch
     pub score: f64,
+    /// Ranges of matches in the search query, useful if you want to hightlight matches.
     pub ranges: Vec<Range<usize>>,
 }
 
+/// Return type for performing a search with a single fuseable property of struct
 #[derive(Debug, PartialEq)]
 pub struct FResult {
+    /// The corresponding field name for this search result
     pub value: String,
+    /// Search rating of the search result, 0.0 is a perfect match 1.0 is a perfect mismatch
     pub score: f64,
+    /// Ranges of matches in the search query, useful if you want to hightlight matches.
     pub ranges: Vec<Range<usize>>,
 }
 
+/// Return type for performing a search over a list of Fuseable structs
 #[derive(Debug, PartialEq)]
 pub struct FusableSearchResult {
+    /// corresponding index of the search result in the original list
     pub index: usize,
+    /// Search rating of the search result, 0.0 is a perfect match 1.0 is a perfect mismatch
     pub score: f64,
+    /// Ranges of matches in the search query, useful if you want to hightlight matches.
     pub results: Vec<FResult>,
 }
 
+/// Creates a new fuse object with given config settings
+/// Use to create patterns and access the search methods. 
+/// Also implements a default method to quickly get a fuse 
+/// object ready with the default config.
+/// # Examples: 
+/// Basic Usage: 
+/// ```rust
+/// let fuse = Fuse{
+///     location: 0,
+///     distance: 100,
+///     threshold: 0.6,
+///     is_case_sensitive: false,
+///     tokenize: false,
+/// }
+/// ```
 pub struct Fuse {
+    /// location to starting looking for patterns
     pub location: i32,
+    /// maximum distance to look away from the location
     pub distance: i32,
+    /// threshold for the search algorithm to give up at, 0.0 is perfect match 1.0 is imperfect match
     pub threshold: f64,
+    /// maximum allowed pattern length
     pub max_pattern_length: i32,
+    /// check for lowercase and uppercase seperately
     pub is_case_sensitive: bool,
+    /// tokenize search patterns
     pub tokenize: bool,
 }
 
@@ -82,6 +164,10 @@ impl std::default::Default for Fuse {
 }
 
 impl Fuse {
+    /// Creates a pattern object from input string.
+    ///
+    /// - Parameter string: A string from which to create the pattern object
+    /// - Returns: A tuple containing pattern metadata
     pub fn create_pattern(&self, string: &str) -> Option<Pattern> {
         let lowercase = string.to_lowercase();
         let pattern = if self.is_case_sensitive { string } else { &lowercase };
@@ -254,6 +340,17 @@ impl Fuse {
             }
     }
 
+    /// Searches for a pattern in a given string.
+    /// - Parameters:
+    ///   - pattern: The pattern to search for. This is created by calling `createPattern`
+    ///   - string: The string in which to search for the pattern
+    /// - Returns: Some(ScoreResult) if a match is found containing a `score` between `0.0` (exact match) and `1` (not a match), and `ranges` of the matched characters. If no match is found will return None.
+    /// # Example: 
+    /// ```rust
+    /// let fuse = Fuse::Default();
+    /// let pattern = fuse.create_pattern("some text");
+    /// fuse.search(pattern, "some string");
+    /// ```
     pub fn search(
         &self,
         pattern: Option<&Pattern>,
@@ -289,16 +386,81 @@ impl Fuse {
     }
 }
 
+/// Implementable trait for user defined structs, requires two methods to me implemented.
+/// A properties method that should return a list of FuseProperties. 
+/// and a lookup method which should return the value of field, provided the field name. 
+/// # Examples: 
+/// Usage: 
+/// ```rust
+/// struct Book<'a> {
+///     title: &'a str,
+///     author: &'a str,
+/// }
+///
+/// impl Fuseable for Book {
+///     fn properties(&self) -> Vec<FuseableProperty> {
+///         return vec!(
+///             FuseProperty{value: String::from("title"), weight: 0.3},
+///             FuseProperty{value: String::from("author"), weight: 0.7},
+///         )
+///     }
+///     fn lookup(&self, key: &str) -> Option<&str> {
+///         return match key {
+///             "title" => Some(self.title),
+///             "author" => Some(self.author),
+///             _ => None
+///         }
+///     }
+/// }
+/// ```
 pub trait Fuseable {
+    /// Returns a list of FuseProperty that contains the field name and its corresponding weight
     fn properties(&self) -> Vec<FuseProperty> ;
+    /// Provided a field name as argument, returns the value of the field. eg book.loopkup("author") === book.author
     fn lookup(&self, key: &str) -> Option<&str> ;
 }
 
 impl Fuse {
-    pub fn search_text_in_string(&self, text: &str, astring: &str) -> Option<ScoreResult>{
-        self.search(self.create_pattern(text).as_ref(), astring)
+    /// Searches for a text pattern in a given string.
+    /// - Parameters:
+    ///   - text: the text string to search for.
+    ///   - string: The string in which to search for the pattern
+    /// - Returns: Some(ScoreResult) if a match is found, containing a `score` between `0.0` (exact match) and `1` (not a match), and `ranges` of the matched characters. Otherwise if a match is not found, returns None.
+    /// # Examples: 
+    /// ```rust
+    ///     let fuse = Fuse::default();
+    ///     fuse.search_text_in_string("some text", "some string");
+    /// ```
+    /// **Note**: if the same text needs to be searched across many strings, consider creating the pattern once via `createPattern`, and then use the other `search` function. This will improve performance, as the pattern object would only be created once, and re-used across every search call:
+    /// ```rust
+    ///     let fuse = Fuse::Default();
+    ///     let pattern = fuse.create_pattern("some text");
+    ///     fuse.search_text_in_string(pattern, "some string");
+    ///     fuse.search_text_in_string(pattern, "another string");
+    ///     fuse.search_text_in_string(pattern, "yet another string");
+    /// ```
+    pub fn search_text_in_string(&self, text: &str, string: &str) -> Option<ScoreResult>{
+        self.search(self.create_pattern(text).as_ref(), string)
     }
 
+    /// Searches for a text pattern in an iterable containing string references.
+    ///
+    /// - Parameters:
+    ///   - text: The pattern string to search for
+    ///   - list: Iterable over string references
+    /// - Returns: Vec<SearchResult> containing Search results corresponding to matches found, with its `index`, its `score`, and the `ranges` of the matched characters. 
+    /// 
+    /// # Example: 
+    /// ```rust
+    /// let fuse = Fuse::default();
+    /// let books = [
+    ///     "The Silmarillion",
+    ///     "The Lock Artist",
+    ///     "The Lost Symbol"
+    /// ];
+    ///
+    /// let results = fuse.search_text_in_iterable("Te silm", books.iter());
+    /// ```
     pub fn search_text_in_iterable<It>(&self, text: &str, list: It) -> Vec<SearchResult>
     where 
         It: IntoIterator,
@@ -322,6 +484,27 @@ impl Fuse {
         items
     }
 
+    /// Asynchronously searches for a text pattern in a slice of string references.
+    ///
+    /// - Parameters:
+    ///   - text: The pattern string to search for
+    ///   - list: &[&str] A reference to a slice of string references.
+    ///   - chunkSize: The size of a single chunk of the array. For example, if the slice has `1000` items, it may be useful to split the work into 10 chunks of 100. This should ideally speed up the search logic.
+    ///   - completion: The handler which is executed upon completion
+    /// 
+    /// # Example: 
+    /// ```rust
+    /// let fuse = Fuse::default();
+    /// let books = [
+    ///     "The Silmarillion",
+    ///     "The Lock Artist",
+    ///     "The Lost Symbol"
+    /// ];
+    ///
+    /// fuse.search_text_in_string_list("Te silm", &books, 100 as usize, &|x: Vec<SearchResult>| {
+    ///     dbg!(x);
+    /// });
+    /// ```
     pub fn search_text_in_string_list(&self, text: &str, list: &[&str], chunk_size: usize, completion: &dyn Fn(Vec<SearchResult>)){
         let pattern = Arc::new(self.create_pattern(text));
         
@@ -361,6 +544,47 @@ impl Fuse {
         completion(items);
     }
 
+        
+    /// Searches for a text pattern in an array of `Fuseable` objects.
+    /// - Parameters:
+    ///   - text: The pattern string to search for
+    ///   - list: A list of `Fuseable` objects, i.e. structs implementing the Fuseable trait in which to search
+    /// - Returns: A list of `FuseableSearchResult` objects
+    /// Each `Fuseable` object contains a `properties` method which returns `FuseProperty` array. Each `FuseProperty` is a struct containing a `value` (the name of the field which should be included in the search), and a `weight` (how much "weight" to assign to the score)
+    ///
+    /// # Example
+    /// ```rust
+    /// struct Book<'a> {
+    ///    title: &'a str,
+    ///    author: &'a str,
+    /// }
+    ///
+    /// impl Fuseable for Book<'_>{
+    ///     fn properties(&self) -> Vec<FuseProperty> {
+    ///         return vec!(
+    ///             FuseProperty{value: String::from("title"), weight: 0.3},
+    ///             FuseProperty{value: String::from("author"), weight: 0.7},
+    ///         )
+    ///     }
+    /// 
+    ///     fn lookup(&self, key: &str) -> Option<&str> {
+    ///         return match key {
+    ///             "title" => Some(self.title),
+    ///             "author" => Some(self.author),
+    ///             _ => None
+    ///         }
+    ///     }
+    /// }
+    /// # fn main() {    
+    ///     let books = [
+    ///         Book{author: "John X", title: "Old Man's War fiction"},
+    ///         Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
+    ///     ];
+    ///     
+    ///     let fuse = Fuse::default();
+    ///     let results = fuse.search_text_in_fuse_list("man", &books);
+    /// # }
+    /// ```
     pub fn search_text_in_fuse_list(&self, text: &str, list: &[impl Fuseable]) -> Vec<FusableSearchResult> {
         let pattern = self.create_pattern(text);
         let mut result = vec!();
@@ -403,6 +627,50 @@ impl Fuse {
         result.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
         return result;
     }
+
+    /// Asynchronously searches for a text pattern in an array of `Fuseable` objects.
+    /// - Parameters:
+    ///   - text: The pattern string to search for
+    ///   - list: A list of `Fuseable` objects, i.e. structs implementing the Fuseable trait in which to search
+    ///   - chunkSize: The size of a single chunk of the array. For example, if the array has `1000` items, it may be useful to split the work into 10 chunks of 100. This should ideally speed up the search logic. Defaults to `100`.
+    ///   - completion: The handler which is executed upon completion
+    /// Each `Fuseable` object contains a `properties` method which returns `FuseProperty` array. Each `FuseProperty` is a struct containing a `value` (the name of the field which should be included in the search), and a `weight` (how much "weight" to assign to the score)
+    ///
+    /// # Example
+    /// ```rust
+    /// struct Book<'a> {
+    ///    title: &'a str,
+    ///    author: &'a str,
+    /// }
+    ///
+    /// impl Fuseable for Book<'_>{
+    ///     fn properties(&self) -> Vec<FuseProperty> {
+    ///         return vec!(
+    ///             FuseProperty{value: String::from("title"), weight: 0.3},
+    ///             FuseProperty{value: String::from("author"), weight: 0.7},
+    ///         )
+    ///     }
+    /// 
+    ///     fn lookup(&self, key: &str) -> Option<&str> {
+    ///         return match key {
+    ///             "title" => Some(self.title),
+    ///             "author" => Some(self.author),
+    ///             _ => None
+    ///         }
+    ///     }
+    /// }
+    /// # fn main() {    
+    ///     let books = [
+    ///         Book{author: "John X", title: "Old Man's War fiction"},
+    ///         Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
+    ///     ];
+    ///     
+    ///     let fuse = Fuse::default();
+    ///     let results = fuse.search_text_in_fuse_list_with_chunk_size("man", &books, 1, &|x: Vec<FuseableSearchResult>| {
+    ///         dbg!(x);
+    ///     });
+    /// # }
+    /// ```
     pub fn search_text_in_fuse_list_with_chunk_size<T>(&self, text: &str, list: &[T], chunk_size: usize, completion: &dyn Fn(Vec<FusableSearchResult>))
     where T:Fuseable + std::marker::Sync{
         let pattern = Arc::new(self.create_pattern(text));
