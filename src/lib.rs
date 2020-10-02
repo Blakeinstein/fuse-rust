@@ -17,14 +17,15 @@ use crossbeam::thread;
 /// returned by properties() implemented by the Fuseable trait. 
 /// # Examples: 
 /// Basic Usage: 
-/// ```
+/// ```no_run
+/// use fuse_rust::{ Fuse, Fuseable, FuseProperty };
 /// struct Book<'a> {
 ///     title: &'a str,
 ///     author: &'a str,
 /// }
 /// 
-/// impl Fuseable for Book {
-///     fn properties(&self) -> Vec<FuseableProperty> {
+/// impl Fuseable for Book<'_>{
+///     fn properties(&self) -> Vec<FuseProperty> {
 ///         return vec!(
 ///             FuseProperty{value: String::from("title"), weight: 0.3},
 ///             FuseProperty{value: String::from("author"), weight: 0.7},
@@ -68,7 +69,8 @@ impl FuseProperty {
 /// Always use fuse.create_pattern("search string") to create a pattern
 /// # Examples: 
 /// Basic usage: 
-/// ```
+/// ```no_run
+/// use fuse_rust::{ Fuse };
 /// let fuse = Fuse::default();
 /// let pattern = fuse.create_pattern("Hello");
 /// ```
@@ -112,7 +114,7 @@ pub struct FResult {
 
 /// Return type for performing a search over a list of Fuseable structs
 #[derive(Debug, PartialEq)]
-pub struct FusableSearchResult {
+pub struct FuseableSearchResult {
     /// corresponding index of the search result in the original list
     pub index: usize,
     /// Search rating of the search result, 0.0 is a perfect match 1.0 is a perfect mismatch
@@ -127,14 +129,16 @@ pub struct FusableSearchResult {
 /// object ready with the default config.
 /// # Examples: 
 /// Basic Usage: 
-/// ```rust
+/// ```no_run
+/// # use fuse_rust::{ Fuse };
 /// let fuse = Fuse{
 ///     location: 0,
 ///     distance: 100,
 ///     threshold: 0.6,
+///     max_pattern_length: 32,
 ///     is_case_sensitive: false,
 ///     tokenize: false,
-/// }
+/// };
 /// ```
 pub struct Fuse {
     /// location to starting looking for patterns
@@ -347,10 +351,11 @@ impl Fuse {
     ///   - string: The string in which to search for the pattern
     /// - Returns: Some(ScoreResult) if a match is found containing a `score` between `0.0` (exact match) and `1` (not a match), and `ranges` of the matched characters. If no match is found will return None.
     /// # Example: 
-    /// ```rust
-    /// let fuse = Fuse::Default();
+    /// ```no_run
+    /// use fuse_rust::{ Fuse };
+    /// let fuse = Fuse::default();
     /// let pattern = fuse.create_pattern("some text");
-    /// fuse.search(pattern, "some string");
+    /// fuse.search(pattern.as_ref(), "some string");
     /// ```
     pub fn search(
         &self,
@@ -392,14 +397,15 @@ impl Fuse {
 /// and a lookup method which should return the value of field, provided the field name. 
 /// # Examples: 
 /// Usage: 
-/// ```rust
+/// ```no_run
+/// use fuse_rust::{ Fuse, Fuseable, FuseProperty };
 /// struct Book<'a> {
 ///     title: &'a str,
 ///     author: &'a str,
 /// }
 ///
-/// impl Fuseable for Book {
-///     fn properties(&self) -> Vec<FuseableProperty> {
+/// impl Fuseable for Book<'_>{
+///     fn properties(&self) -> Vec<FuseProperty> {
 ///         return vec!(
 ///             FuseProperty{value: String::from("title"), weight: 0.3},
 ///             FuseProperty{value: String::from("author"), weight: 0.7},
@@ -428,17 +434,19 @@ impl Fuse {
     ///   - string: The string in which to search for the pattern
     /// - Returns: Some(ScoreResult) if a match is found, containing a `score` between `0.0` (exact match) and `1` (not a match), and `ranges` of the matched characters. Otherwise if a match is not found, returns None.
     /// # Examples: 
-    /// ```rust
-    ///     let fuse = Fuse::default();
-    ///     fuse.search_text_in_string("some text", "some string");
+    /// ```no_run
+    /// use fuse_rust::{ Fuse };
+    /// let fuse = Fuse::default();
+    /// fuse.search_text_in_string("some text", "some string");
     /// ```
     /// **Note**: if the same text needs to be searched across many strings, consider creating the pattern once via `createPattern`, and then use the other `search` function. This will improve performance, as the pattern object would only be created once, and re-used across every search call:
-    /// ```rust
-    ///     let fuse = Fuse::Default();
-    ///     let pattern = fuse.create_pattern("some text");
-    ///     fuse.search_text_in_string(pattern, "some string");
-    ///     fuse.search_text_in_string(pattern, "another string");
-    ///     fuse.search_text_in_string(pattern, "yet another string");
+    /// ```no_run
+    /// use fuse_rust::{ Fuse };
+    /// let fuse = Fuse::default();
+    /// let pattern = fuse.create_pattern("some text");
+    /// fuse.search(pattern.as_ref(), "some string");
+    /// fuse.search(pattern.as_ref(), "another string");
+    /// fuse.search(pattern.as_ref(), "yet another string");
     /// ```
     pub fn search_text_in_string(&self, text: &str, string: &str) -> Option<ScoreResult>{
         self.search(self.create_pattern(text).as_ref(), string)
@@ -452,7 +460,8 @@ impl Fuse {
     /// - Returns: Vec<SearchResult> containing Search results corresponding to matches found, with its `index`, its `score`, and the `ranges` of the matched characters. 
     /// 
     /// # Example: 
-    /// ```rust
+    /// ```no_run
+    /// use fuse_rust::{ Fuse };
     /// let fuse = Fuse::default();
     /// let books = [
     ///     "The Silmarillion",
@@ -494,7 +503,8 @@ impl Fuse {
     ///   - completion: The handler which is executed upon completion
     /// 
     /// # Example: 
-    /// ```rust
+    /// ```no_run
+    /// use fuse_rust::{ Fuse, SearchResult };
     /// let fuse = Fuse::default();
     /// let books = [
     ///     "The Silmarillion",
@@ -554,7 +564,8 @@ impl Fuse {
     /// Each `Fuseable` object contains a `properties` method which returns `FuseProperty` array. Each `FuseProperty` is a struct containing a `value` (the name of the field which should be included in the search), and a `weight` (how much "weight" to assign to the score)
     ///
     /// # Example
-    /// ```rust
+    /// ```no_run
+    /// use fuse_rust::{ Fuse, Fuseable, FuseProperty };
     /// struct Book<'a> {
     ///    title: &'a str,
     ///    author: &'a str,
@@ -586,7 +597,7 @@ impl Fuse {
     ///     let results = fuse.search_text_in_fuse_list("man", &books);
     /// # }
     /// ```
-    pub fn search_text_in_fuse_list(&self, text: &str, list: &[impl Fuseable]) -> Vec<FusableSearchResult> {
+    pub fn search_text_in_fuse_list(&self, text: &str, list: &[impl Fuseable]) -> Vec<FuseableSearchResult> {
         let pattern = self.create_pattern(text);
         let mut result = vec!();
         for (index, item) in list.iter().enumerate() {
@@ -618,7 +629,7 @@ impl Fuse {
             }
 
             let count = scores.len() as f64;
-            result.push(FusableSearchResult{
+            result.push(FuseableSearchResult{
                 index: index,
                 score: total_score / count,
                 results: property_results,
@@ -638,7 +649,8 @@ impl Fuse {
     /// Each `Fuseable` object contains a `properties` method which returns `FuseProperty` array. Each `FuseProperty` is a struct containing a `value` (the name of the field which should be included in the search), and a `weight` (how much "weight" to assign to the score)
     ///
     /// # Example
-    /// ```rust
+    /// ```no_run
+    /// use fuse_rust::{ Fuse, Fuseable, FuseProperty, FuseableSearchResult };
     /// struct Book<'a> {
     ///    title: &'a str,
     ///    author: &'a str,
@@ -672,7 +684,7 @@ impl Fuse {
     ///     });
     /// # }
     /// ```
-    pub fn search_text_in_fuse_list_with_chunk_size<T>(&self, text: &str, list: &[T], chunk_size: usize, completion: &dyn Fn(Vec<FusableSearchResult>))
+    pub fn search_text_in_fuse_list_with_chunk_size<T>(&self, text: &str, list: &[T], chunk_size: usize, completion: &dyn Fn(Vec<FuseableSearchResult>))
     where T:Fuseable + std::marker::Sync{
         let pattern = Arc::new(self.create_pattern(text));
         
@@ -718,7 +730,7 @@ impl Fuse {
                         }
             
                         let count = scores.len() as f64;
-                        chunk_items.push(FusableSearchResult{
+                        chunk_items.push(FuseableSearchResult{
                             index: index,
                             score: total_score / count,
                             results: property_results,

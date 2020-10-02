@@ -32,9 +32,8 @@ pub fn calculate_score(
 }
 
 /// Initializes the alphabet for the Bitap algorithm
-///
 /// - Parameter pattern: The text to encode.
-/// - Returns: Hash of character locations.
+/// - Returns: Hashmap of character locations.
 pub fn calculate_pattern_alphabet(pattern: &str) -> HashMap<char, u32> {
     let len = pattern.len();
     let mut mask = HashMap::new();
@@ -44,15 +43,9 @@ pub fn calculate_pattern_alphabet(pattern: &str) -> HashMap<char, u32> {
     mask
 }
 
-/// Returns an array of `CountableClosedRange<Int>`, where each range represents a consecutive list of `1`s.
-///
-///     let arr = [0, 1, 1, 0, 1, 1, 1 ]
-///     let ranges = findRanges(arr)
-///     // [{startIndex 1, endIndex 2}, {startIndex 4, endIndex 6}
-///
+/// Returns an array of `Range<usize>`, where each range represents a consecutive list of `1`s.
 /// - Parameter mask: A string representing the value to search for.
-///
-/// - Returns: `CountableClosedRange<Int>` array.
+/// - Returns: `Vec<Range<usize>`.
 pub fn find_ranges(mask: &[u8]) -> Result<Vec<Range<usize>>, String> {
     if mask.is_empty() {
         return Err(String::from("Input array is empty"));

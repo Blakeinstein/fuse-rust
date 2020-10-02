@@ -1,4 +1,4 @@
-use fuse_rust::{ Fuse, Fuseable, FuseProperty, FResult, FusableSearchResult };
+use fuse_rust::{ Fuse, Fuseable, FuseProperty, FResult, FuseableSearchResult };
 
 #[derive(Debug)]
 struct Book<'a> {
@@ -32,7 +32,7 @@ fn main() {
     let results = fuse.search_text_in_fuse_list("man", &books);
     
     assert_eq!(results, vec!(
-        FusableSearchResult{
+        FuseableSearchResult{
             index: 1,
             score: 0.015000000000000003,
             results: vec!(FResult{
@@ -41,7 +41,7 @@ fn main() {
                 ranges: vec!((5..8)),
             }),
         },
-        FusableSearchResult{
+        FuseableSearchResult{
             index: 0,
             score: 0.027999999999999997,
             results: vec!(FResult{
