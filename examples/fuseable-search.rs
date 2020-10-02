@@ -1,4 +1,4 @@
-use fuse_rs::{ Fuse, Fuseable, FuseProperty };
+use fuse_rs::{ Fuse, Fuseable, FuseProperty, FResult, FusableSearchResult };
 
 #[derive(Debug)]
 struct Book<'a> {
@@ -31,12 +31,32 @@ fn main() {
     let fuse = Fuse::default();
     let results = fuse.search_text_in_fuse_list("man", &books);
     
+    assert_eq!(results, vec!(
+        FusableSearchResult{
+            index: 1,
+            score: 0.015000000000000003,
+            results: vec!(FResult{
+                value: String::from("author"),
+                score: 0.015000000000000003,
+                ranges: vec!((5..8)),
+            }),
+        },
+        FusableSearchResult{
+            index: 0,
+            score: 0.027999999999999997,
+            results: vec!(FResult{
+                value: String::from("title"),
+                score: 0.027999999999999997,
+                ranges: vec!((4..7)),
+            })
+        }
+    ), "Fuseable Search returned incorrect results");
+    
     results.iter().for_each(|result| 
         println!(r#"
-            index: {}
-            score: {}
-            results: {:?}
-            ---------------
-        "#, result.index, result.score, result.results)
+index: {}
+score: {}
+results: {:?}
+---------------"#, result.index, result.score, result.results)
     );
 }

@@ -32,27 +32,27 @@ pub struct Pattern{
     alphabet: HashMap<char, u32>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct SearchResult {
     pub index: usize,
     pub score: f64,
     pub ranges: Vec<Range<usize>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ScoreResult {
     pub score: f64,
     pub ranges: Vec<Range<usize>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FResult {
     pub value: String,
     pub score: f64,
     pub ranges: Vec<Range<usize>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FusableSearchResult {
     pub index: usize,
     pub score: f64,

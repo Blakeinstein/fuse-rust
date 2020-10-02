@@ -7,6 +7,20 @@ Fuse-RS is a port of https://github.com/krisk/fuse-swift written purely in rust.
 
 ## Usage
 
+#### Initializing
+
+The first step is to create a fuse object, with the necessary parameters. Fuse::default, returns the following parameters.
+```rust
+Fuse::Default() = Fuse{
+    location: 0, // Approx where to start looking for the pattern
+    distance: 100, // Maximum distance the score should scale to
+    threshold: 0.6, // A threshold for guess work
+    max_pattern_length: 32, // max valid pattern length
+    is_case_sensitive: false,
+    tokenize: false, // the input search text should be tokenized
+}
+```
+
 #### Example 1
 
 Simple search.
@@ -20,7 +34,10 @@ let text = "Old Man's War";
 let search_text = "od mn war";
 
 let result = fuse.search_text_in_string(search_text, text);
-dbg!(result);
+assert_eq!(result, Some(ScoreResult{
+    score: 0.4444444444444444,
+    ranges: vec!((0..1), (2..7), (9..13)),
+}), "Simple search returned incorrect results");
 ```
 
 #### Example 2
@@ -41,12 +58,24 @@ let books = [
 // Improve performance by creating the pattern before hand.
 let search_pattern = fuse.create_pattern("Te silm");
 
-books.iter().for_each(|&item| {
-    let result = fuse.search(search_pattern.as_ref(), &item);
-    dbg!(result);
-});
-
-// alternatively you can use fuse.search_text_in_iterable("Te silm", books.iter())
+let results = fuse.search_text_in_iterable("Te silm", books.iter());
+assert_eq!(results, vec!(
+    SearchResult{
+        index: 0,
+        score: 0.14285714285714285,
+        ranges: vec!((0..1), (2..8), (10..14)),
+    },
+    SearchResult{
+        index: 2,
+        score: 0.49857142857142855,
+        ranges: vec!((0..1), (2..5), (6..10), (11..12), (14..15)),
+    },
+    SearchResult{
+        index: 1,
+        score: 0.5714285714285714,
+        ranges: vec!((0..1), (2..5), (8..9), (11..15)),
+    },
+), "Iterable search returned incorrect results");
 ```
 
 #### Example 3
@@ -88,14 +117,26 @@ fn main() {
     let fuse = Fuse::default();
     let results = fuse.search_text_in_fuse_list("man", &books);
     
-    results.iter().for_each(|result| 
-        println!(r#"
-            index: {}
-            score: {}
-            results: {:?}
-            ---------------
-        "#, result.index, result.score, result.results)
-    );
+    assert_eq!(results, vec!(
+        FusableSearchResult{
+            index: 1,
+            score: 0.015000000000000003,
+            results: vec!(FResult{
+                value: String::from("author"),
+                score: 0.015000000000000003,
+                ranges: vec!((5..8)),
+            }),
+        },
+        FusableSearchResult{
+            index: 0,
+            score: 0.027999999999999997,
+            results: vec!(FResult{
+                value: String::from("title"),
+                score: 0.027999999999999997,
+                ranges: vec!((4..7)),
+            })
+        }
+    ), "Fuseable Search returned incorrect results");
 }
 ```
 
@@ -117,3 +158,13 @@ cargo run --example chunk-search
 ```
 
 This searches for a text over a list of 100 items with a chunk size of 10.
+
+## Options
+
+As given above, Fuse takes the following options
+
+- `location`: Approximately where in the text is the pattern expected to be found. Defaults to `0`
+- `distance`: Determines how close the match must be to the fuzzy `location` (specified above). An exact letter match which is `distance` characters away from the fuzzy location would score as a complete mismatch. A distance of `0` requires the match be at the exact `location` specified, a `distance` of `1000` would require a perfect match to be within `800` characters of the fuzzy location to be found using a 0.8 threshold. Defaults to `100`
+- `threshold`: At what point does the match algorithm give up. A threshold of `0.0` requires a perfect match (of both letters and location), a threshold of `1.0` would match anything. Defaults to `0.6`
+- `maxPatternLength`: The maximum valid pattern length. The longer the pattern, the more intensive the search operation will be. If the pattern exceeds the `maxPatternLength`, the `search` operation will return `nil`. Why is this important? [Read this](https://en.wikipedia.org/wiki/Word_(computer_architecture)#Word_size_choice). Defaults to `32`
+- `isCaseSensitive`: Indicates whether comparisons should be case sensitive. Defaults to `false`
