@@ -1,4 +1,8 @@
 <h1 align="center">Fuse-RS</h1>
+<p align="center">
+    <a href="https://crates.io/crates/fuse-rust"><img src="https://img.shields.io/crates/v/fuse-rust.svg"/></a>
+    <img src="https://github.com/Blakeinstein/fuse-rust/workflows/Rust/badge.svg" />
+</p>
 
 ## What is Fuse?
 Fuse is a super lightweight library which provides a simple way to do fuzzy searching.
