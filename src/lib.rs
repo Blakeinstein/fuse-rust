@@ -339,7 +339,7 @@ impl Fuse {
     /// - Parameters:
     ///   - pattern: The pattern to search for. This is created by calling `createPattern`
     ///   - string: The string in which to search for the pattern
-    /// - Returns: Some(ScoreResult) if a match is found containing a `score` between `0.0` (exact match) and `1` (not a match), and `ranges` of the matched characters. If no match is found will return None.
+    /// - Returns: Some(ScoreResult) if a match is found containing a `score` between `0.0` (exact match) and `1` (not a match), and `ranges` of the matched characters. If no match is found or if search pattern was empty will return None.
     /// # Example:
     /// ```no_run
     /// use fuse_rust::{ Fuse };
