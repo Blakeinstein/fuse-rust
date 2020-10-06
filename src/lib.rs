@@ -59,7 +59,7 @@ impl FuseProperty {
     pub fn init_with_weight(value: &str, weight: f64) -> Self {
         Self {
             value: String::from(value),
-            weight: weight,
+            weight,
         }
     }
 }
@@ -183,15 +183,14 @@ impl Fuse {
         let len = pattern.len();
 
         if len == 0 {
-            println!("Cannot create pattern, input string empty");
             None
         } else {
             let alphabet = utils::calculate_pattern_alphabet(&pattern);
             let new_pattern = Pattern {
                 text: String::from(pattern),
-                len: len,
+                len,
                 mask: 1 << (len - 1),
-                alphabet: alphabet,
+                alphabet,
             };
             Some(new_pattern)
         }
@@ -282,16 +281,14 @@ impl Fuse {
 
             for j in (start as u32..=finish as u32).rev() {
                 let current_location: usize = (j - 1) as usize;
-                let char_match: u32 = {
-                    let mut result = None;
+                let char_match: u32 = *(
                     if current_location < text_count {
                         current_location_index = current_location_index
                             .checked_sub(1)
                             .unwrap_or(current_location);
-                        result = pattern.alphabet.get(&string_chars[current_location_index]);
-                    }
-                    *result.unwrap_or(&0)
-                };
+                        pattern.alphabet.get(&string_chars[current_location_index])
+                    } else { None }
+                ).unwrap_or(&0);
 
                 if char_match != 0 {
                     match_mask_arr[current_location] = 1;
@@ -333,7 +330,7 @@ impl Fuse {
         }
 
         ScoreResult {
-            score: score,
+            score,
             ranges: utils::find_ranges(&match_mask_arr).unwrap(),
         }
     }
@@ -364,9 +361,9 @@ impl Fuse {
             let (length, results) = word_patterns.fold(
                 (0, full_pattern_result),
                 |(n, mut total_result), pattern| {
-                    let result = self.search_util(&pattern, string);
+                    let mut result = self.search_util(&pattern, string);
                     total_result.score += result.score;
-                    total_result.ranges.append(&mut result.ranges.clone());
+                    total_result.ranges.append(&mut result.ranges);
                     (n + 1, total_result)
                 },
             );
@@ -376,18 +373,18 @@ impl Fuse {
                 ranges: results.ranges,
             };
 
-            return if averaged_result.score == 1. {
+            if averaged_result.score == 1. {
                 None
             } else {
                 Some(averaged_result)
-            };
+            }
         } else {
             let result = self.search_util(&pattern, string);
-            return if result.score == 1. {
+            if result.score == 1. {
                 None
             } else {
                 Some(result)
-            };
+            }
         }
     }
 }
@@ -482,7 +479,7 @@ impl Fuse {
         for (index, item) in list.into_iter().enumerate() {
             if let Some(result) = self.search(pattern.as_ref(), item.as_ref()) {
                 items.push(SearchResult {
-                    index: index,
+                    index,
                     score: result.score,
                     ranges: result.ranges,
                 })
@@ -534,7 +531,7 @@ impl Fuse {
                 scope.spawn(move |_| {
                     let mut chunk_items = vec![];
 
-                    for (index, item) in chunk.into_iter().enumerate() {
+                    for (index, item) in chunk.iter().enumerate() {
                         if let Some(result) = self.search((*pattern_ref).as_ref(), item) {
                             chunk_items.push(SearchResult {
                                 index: offset + index,
@@ -572,7 +569,6 @@ impl Fuse {
     ///
     /// # Example
     /// ```no_run
-    /// use fuse_rust::{ Fuse, Fuseable, FuseProperty };
     /// struct Book<'a> {
     ///    title: &'a str,
     ///    author: &'a str,
@@ -618,11 +614,10 @@ impl Fuse {
             let mut property_results = vec![];
             item.properties().iter().for_each(|property| {
                 let value = item.lookup(&property.value).unwrap_or_else(|| {
-                    println!(
-                        "Lookup doesnt contain requested value => {}.",
+                    panic!(format!(
+                        "Lookup Failed: Lookup doesnt contain requested value => {}.",
                         &property.value
-                    );
-                    ""
+                    ));
                 });
                 if let Some(result) = self.search(pattern.as_ref(), &value) {
                     let weight = if property.weight == 1.0 {
@@ -641,7 +636,7 @@ impl Fuse {
 
                     property_results.push(FResult {
                         value: String::from(&property.value),
-                        score: score,
+                        score,
                         ranges: result.ranges,
                     });
                 }
@@ -652,14 +647,14 @@ impl Fuse {
 
             let count = scores.len() as f64;
             result.push(FuseableSearchResult {
-                index: index,
+                index,
                 score: total_score / count,
                 results: property_results,
             })
         }
 
         result.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
-        return result;
+        result
     }
 
     /// Asynchronously searches for a text pattern in an array of `Fuseable` objects.
@@ -672,7 +667,6 @@ impl Fuse {
     ///
     /// # Example
     /// ```no_run
-    /// use fuse_rust::{ Fuse, Fuseable, FuseProperty, FuseableSearchResult };
     /// struct Book<'a> {
     ///    title: &'a str,
     ///    author: &'a str,
@@ -728,18 +722,17 @@ impl Fuse {
                 scope.spawn(move |_| {
                     let mut chunk_items = vec![];
 
-                    for (index, item) in chunk.into_iter().enumerate() {
+                    for (index, item) in chunk.iter().enumerate() {
                         let mut scores = vec![];
                         let mut total_score = 0.0;
 
                         let mut property_results = vec![];
                         item.properties().iter().for_each(|property| {
                             let value = item.lookup(&property.value).unwrap_or_else(|| {
-                                println!(
+                                panic!(format!(
                                     "Lookup doesnt contain requested value => {}.",
                                     &property.value
-                                );
-                                ""
+                                ))
                             });
                             if let Some(result) = self.search((*pattern_ref).as_ref(), &value) {
                                 let weight = if property.weight == 1.0 {
@@ -755,7 +748,7 @@ impl Fuse {
 
                                 property_results.push(FResult {
                                     value: String::from(&property.value),
-                                    score: score,
+                                    score,
                                     ranges: result.ranges,
                                 });
                             }
@@ -767,7 +760,7 @@ impl Fuse {
 
                         let count = scores.len() as f64;
                         chunk_items.push(FuseableSearchResult {
-                            index: index,
+                            index,
                             score: total_score / count,
                             results: property_results,
                         })
