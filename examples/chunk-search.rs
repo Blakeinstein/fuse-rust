@@ -1,4 +1,4 @@
-use fuse_rust::{ Fuse, SearchResult};
+use fuse_rust::{Fuse, SearchResult};
 
 fn test(list: Vec<SearchResult>) {
     dbg!(list);
@@ -107,11 +107,6 @@ fn main() {
         "gbtqzvyiqf",
         "itovolfijo",
     ];
-    
-    fuse.search_text_in_string_list(
-        "aa",
-        &random_strings,
-        10 as usize,
-        &test,
-    );
+
+    fuse.search_text_in_string_list("aa", &random_strings, 10 as usize, &test);
 }

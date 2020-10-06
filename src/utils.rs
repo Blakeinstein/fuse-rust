@@ -6,29 +6,18 @@ pub fn calculate_score_with_string(
     e: i32,
     x: i32,
     loc: i32,
-    distance: i32) -> f64 {
-        calculate_score(
-            pattern.len(),
-            e,
-            x,
-            loc,
-            distance,
-        )
+    distance: i32,
+) -> f64 {
+    calculate_score(pattern.len(), e, x, loc, distance)
 }
 
-pub fn calculate_score(
-    pattern_length: usize,
-    e: i32,
-    x: i32,
-    loc: i32,
-    distance: i32) -> f64 {
-    
+pub fn calculate_score(pattern_length: usize, e: i32, x: i32, loc: i32, distance: i32) -> f64 {
     let accuracy = (e as f64) / (pattern_length as f64);
     let proximity = (x - loc).abs();
     if distance == 0 {
-        return if proximity != 0 { 1. } else { accuracy as f64} 
+        return if proximity != 0 { 1. } else { accuracy as f64 };
     }
-    accuracy + (proximity as f64) / ( distance as f64)
+    accuracy + (proximity as f64) / (distance as f64)
 }
 
 /// Initializes the alphabet for the Bitap algorithm
@@ -38,7 +27,7 @@ pub fn calculate_pattern_alphabet(pattern: &str) -> HashMap<char, u32> {
     let len = pattern.len();
     let mut mask = HashMap::new();
     for (i, c) in pattern.chars().enumerate() {
-        mask.insert(c, mask.get(&c).unwrap_or(&0) | (1 << (len -i -1)));
+        mask.insert(c, mask.get(&c).unwrap_or(&0) | (1 << (len - i - 1)));
     }
     mask
 }
@@ -50,10 +39,10 @@ pub fn find_ranges(mask: &[u8]) -> Result<Vec<Range<usize>>, String> {
     if mask.is_empty() {
         return Err(String::from("Input array is empty"));
     }
-    let mut ranges = vec!();
+    let mut ranges = vec![];
     let mut start: i32 = -1;
     for (n, bit) in mask.iter().enumerate() {
-        if start == -1 && *bit >= 1{
+        if start == -1 && *bit >= 1 {
             start = n as i32;
         } else if start != -1 && *bit == 0 {
             ranges.push(start as usize..n);
