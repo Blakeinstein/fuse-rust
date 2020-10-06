@@ -1,16 +1,6 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
-pub fn calculate_score_with_string(
-    pattern: String,
-    e: i32,
-    x: i32,
-    loc: i32,
-    distance: i32,
-) -> f64 {
-    calculate_score(pattern.len(), e, x, loc, distance)
-}
-
 pub fn calculate_score(pattern_length: usize, e: i32, x: i32, loc: i32, distance: i32) -> f64 {
     let accuracy = (e as f64) / (pattern_length as f64);
     let proximity = (x - loc).abs();
