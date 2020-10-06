@@ -1,29 +1,29 @@
 #![warn(missing_docs)]
 
 //! Fuse-RS
-//! 
+//!
 //! A super lightweight fuzzy-search library.
 //! A port of [Fuse-Swift](https://github.com/krisk/fuse-swift) written purely in rust!
 
 mod utils;
 
-use std::collections::HashMap;
-use std::ops::Range;
-use std::sync::{ Arc, Mutex};
 /// Required for scoped threads
 use crossbeam::thread;
+use std::collections::HashMap;
+use std::ops::Range;
+use std::sync::{Arc, Mutex};
 
 /// Defines the fuseproperty object to be returned as part of the list
-/// returned by properties() implemented by the Fuseable trait. 
-/// # Examples: 
-/// Basic Usage: 
+/// returned by properties() implemented by the Fuseable trait.
+/// # Examples:
+/// Basic Usage:
 /// ```no_run
 /// use fuse_rust::{ Fuse, Fuseable, FuseProperty };
 /// struct Book<'a> {
 ///     title: &'a str,
 ///     author: &'a str,
 /// }
-/// 
+///
 /// impl Fuseable for Book<'_>{
 ///     fn properties(&self) -> Vec<FuseProperty> {
 ///         return vec!(
@@ -49,32 +49,32 @@ pub struct FuseProperty {
 
 impl FuseProperty {
     /// create a fuse property with weight 1.0 and a string reference.
-    pub fn init(value: &str) -> Self{
-        Self{
-            value: String::from(value), 
+    pub fn init(value: &str) -> Self {
+        Self {
+            value: String::from(value),
             weight: 1.0,
         }
     }
     /// create a fuse property with a specified weight and string reference.
-    pub fn init_with_weight(value: &str, weight: f64) -> Self{
-        Self{
+    pub fn init_with_weight(value: &str, weight: f64) -> Self {
+        Self {
             value: String::from(value),
             weight: weight,
         }
     }
 }
 
-/// A datatype to store the pattern's text, its length, a mask 
-/// and a hashmap against each alphabet in the text. 
+/// A datatype to store the pattern's text, its length, a mask
+/// and a hashmap against each alphabet in the text.
 /// Always use fuse.create_pattern("search string") to create a pattern
-/// # Examples: 
-/// Basic usage: 
+/// # Examples:
+/// Basic usage:
 /// ```no_run
 /// use fuse_rust::{ Fuse };
 /// let fuse = Fuse::default();
 /// let pattern = fuse.create_pattern("Hello");
 /// ```
-pub struct Pattern{
+pub struct Pattern {
     text: String,
     len: usize,
     mask: u32,
@@ -124,11 +124,11 @@ pub struct FuseableSearchResult {
 }
 
 /// Creates a new fuse object with given config settings
-/// Use to create patterns and access the search methods. 
-/// Also implements a default method to quickly get a fuse 
+/// Use to create patterns and access the search methods.
+/// Also implements a default method to quickly get a fuse
 /// object ready with the default config.
-/// # Examples: 
-/// Basic Usage: 
+/// # Examples:
+/// Basic Usage:
 /// ```no_run
 /// # use fuse_rust::{ Fuse };
 /// let fuse = Fuse{
@@ -157,7 +157,7 @@ pub struct Fuse {
 
 impl std::default::Default for Fuse {
     fn default() -> Self {
-        Self{
+        Self {
             location: 0,
             distance: 100,
             threshold: 0.6,
@@ -175,7 +175,11 @@ impl Fuse {
     /// - Returns: A tuple containing pattern metadata
     pub fn create_pattern(&self, string: &str) -> Option<Pattern> {
         let lowercase = string.to_lowercase();
-        let pattern = if self.is_case_sensitive { string } else { &lowercase };
+        let pattern = if self.is_case_sensitive {
+            string
+        } else {
+            &lowercase
+        };
         let len = pattern.len();
 
         if len == 0 {
@@ -183,7 +187,7 @@ impl Fuse {
             None
         } else {
             let alphabet = utils::calculate_pattern_alphabet(&pattern);
-            let new_pattern = Pattern{
+            let new_pattern = Pattern {
                 text: String::from(pattern),
                 len: len,
                 mask: 1 << (len - 1),
@@ -191,158 +195,147 @@ impl Fuse {
             };
             Some(new_pattern)
         }
-     
     }
 
-    fn search_util(
-        &self,
-        pattern: &Pattern,
-        string: &str) -> ScoreResult {
-            let string = if self.is_case_sensitive {
-                String::from(string)
-            } else {
-                string.to_ascii_lowercase()
+    fn search_util(&self, pattern: &Pattern, string: &str) -> ScoreResult {
+        let string = if self.is_case_sensitive {
+            String::from(string)
+        } else {
+            string.to_ascii_lowercase()
+        };
+        let string_chars = string.chars().collect::<Vec<_>>();
+        let text_length = string.len();
+
+        // Exact match
+        if pattern.text == string {
+            return ScoreResult {
+                score: 0.,
+                ranges: vec![0..text_length as usize],
             };
-            let string_chars = string.chars().collect::<Vec<_>>();
-            let text_length = string.len();
+        }
 
-            // Exact match
-            if pattern.text == string {
-                return ScoreResult {
-                    score: 0.,
-                    ranges: vec![0..text_length as usize]
-                };
+        let location = self.location;
+        let distance = self.distance;
+        let mut threshold = self.threshold;
+
+        let mut best_location = string.find(&pattern.text).unwrap_or(0 as usize);
+
+        let mut match_mask_arr = vec![0; text_length];
+
+        let mut index = string[best_location..].find(&pattern.text);
+
+        let mut score;
+
+        while index.is_some() {
+            let i = best_location + index.unwrap();
+            score = utils::calculate_score(pattern.len, 0, i as i32, location, distance);
+
+            threshold = threshold.min(score);
+
+            best_location = i + pattern.len;
+
+            index = string[best_location..].find(&pattern.text);
+
+            for idx in 0..pattern.len {
+                match_mask_arr[i + idx] = 1;
             }
+        }
 
-            let location = self.location;
-            let distance = self.distance;
-            let mut threshold = self.threshold;
+        score = 1.;
+        let mut bin_max = pattern.len + text_length;
+        let mut last_bit_arr = vec![];
 
-            let mut best_location = string.find(&pattern.text).unwrap_or(0 as usize);
+        let text_count = string.len();
 
-            let mut match_mask_arr = vec![0; text_length];
-
-            let mut index = string[
-                    best_location..
-                ].find(&pattern.text);
-
-            let mut score;
-            
-            while index.is_some() {
-                let i = best_location + index.unwrap();
-                score = utils::calculate_score(
-                    pattern.len,
-                    0,
-                    i as i32,
-                    location,
-                    distance
-                );
-
-                threshold = threshold.min(score);
-
-                best_location = i + pattern.len;
-
-                index = string[
-                        best_location..
-                    ].find(&pattern.text);
-                
-                for idx in 0..pattern.len {
-                    match_mask_arr[i+idx] = 1;
-                };
-            }
-
-            score = 1.;
-            let mut bin_max = pattern.len + text_length;
-            let mut last_bit_arr = vec!();
-
-            let text_count = string.len();
-            
-            for i in 0..pattern.len {
-                let mut bin_min = 0;
-                let mut bin_mid = bin_max;
-                while bin_min < bin_mid {
-                    if utils::calculate_score(
-                        pattern.len, i as i32, location, location + bin_mid as i32, distance) <= threshold {
-                            bin_min = bin_mid;
-                    } else {
-                        bin_max = bin_mid;
-                    }
-                    bin_mid = ((bin_max - bin_min) / 2) + bin_min;
-                }
-                bin_max = bin_mid;
-
-                let start = 1.max(location - bin_mid as i32 + 1) as usize;
-                let finish = text_length.min(location as usize + bin_mid) + pattern.len;
-
-                let mut bit_arr = vec!(0; finish + 2);
-
-                bit_arr[finish+1] = (1 << i) - 1;
-                
-                if start > finish {
-                    continue;
-                };
-
-                let mut current_location_index: usize = 0;
-
-                for j in (start as u32..=finish as u32).rev() {
-                    let current_location: usize = (j - 1) as usize;
-                    let char_match: u32 = {
-                        let mut result = None;
-                        if current_location < text_count {
-                            current_location_index = current_location_index.checked_sub(1).unwrap_or(current_location);
-                            result = pattern.alphabet.get(
-                                &string_chars[current_location_index]
-                            );
-                        }
-                        *result.unwrap_or(&0)
-                    };
-                    
-                    if char_match != 0 {
-                        match_mask_arr[current_location] = 1;
-                    }
-                    
-                    let j2 = j as usize;
-                    bit_arr[j2] = ((bit_arr[j2+1] << 1) | 1) & char_match;
-                    if i > 0 {
-                        bit_arr[j2] |= (((last_bit_arr[j2+1] | last_bit_arr[j2]) << 1 as u32) | 1) | last_bit_arr[j2+1];
-                    };
-
-                    if (bit_arr[j2] & pattern.mask) != 0 {
-                        score = utils::calculate_score(
-                            pattern.len,
-                            i as i32,
-                            location,
-                            current_location as i32,
-                            distance
-                        );
-            
-                        if score <= threshold {
-                            threshold = score;
-                            best_location = current_location;
-
-                            if best_location as i32 <= location {
-                                break;
-                            };
-                        }
-                    }
-                }
+        for i in 0..pattern.len {
+            let mut bin_min = 0;
+            let mut bin_mid = bin_max;
+            while bin_min < bin_mid {
                 if utils::calculate_score(
                     pattern.len,
-                    i as i32 + 1,
+                    i as i32,
                     location,
-                    location,
-                    distance
-                ) > threshold {
-                    break;  
+                    location + bin_mid as i32,
+                    distance,
+                ) <= threshold
+                {
+                    bin_min = bin_mid;
+                } else {
+                    bin_max = bin_mid;
                 }
+                bin_mid = ((bin_max - bin_min) / 2) + bin_min;
+            }
+            bin_max = bin_mid;
 
-                last_bit_arr = bit_arr.clone();
+            let start = 1.max(location - bin_mid as i32 + 1) as usize;
+            let finish = text_length.min(location as usize + bin_mid) + pattern.len;
+
+            let mut bit_arr = vec![0; finish + 2];
+
+            bit_arr[finish + 1] = (1 << i) - 1;
+
+            if start > finish {
+                continue;
             };
 
-            ScoreResult {
-                score: score,
-                ranges: utils::find_ranges(&match_mask_arr).unwrap(),
+            let mut current_location_index: usize = 0;
+
+            for j in (start as u32..=finish as u32).rev() {
+                let current_location: usize = (j - 1) as usize;
+                let char_match: u32 = {
+                    let mut result = None;
+                    if current_location < text_count {
+                        current_location_index = current_location_index
+                            .checked_sub(1)
+                            .unwrap_or(current_location);
+                        result = pattern.alphabet.get(&string_chars[current_location_index]);
+                    }
+                    *result.unwrap_or(&0)
+                };
+
+                if char_match != 0 {
+                    match_mask_arr[current_location] = 1;
+                }
+
+                let j2 = j as usize;
+                bit_arr[j2] = ((bit_arr[j2 + 1] << 1) | 1) & char_match;
+                if i > 0 {
+                    bit_arr[j2] |= (((last_bit_arr[j2 + 1] | last_bit_arr[j2]) << 1 as u32) | 1)
+                        | last_bit_arr[j2 + 1];
+                };
+
+                if (bit_arr[j2] & pattern.mask) != 0 {
+                    score = utils::calculate_score(
+                        pattern.len,
+                        i as i32,
+                        location,
+                        current_location as i32,
+                        distance,
+                    );
+
+                    if score <= threshold {
+                        threshold = score;
+                        best_location = current_location;
+
+                        if best_location as i32 <= location {
+                            break;
+                        };
+                    }
+                }
             }
+            if utils::calculate_score(pattern.len, i as i32 + 1, location, location, distance)
+                > threshold
+            {
+                break;
+            }
+
+            last_bit_arr = bit_arr.clone();
+        }
+
+        ScoreResult {
+            score: score,
+            ranges: utils::find_ranges(&match_mask_arr).unwrap(),
+        }
     }
 
     /// Searches for a pattern in a given string.
@@ -350,53 +343,60 @@ impl Fuse {
     ///   - pattern: The pattern to search for. This is created by calling `createPattern`
     ///   - string: The string in which to search for the pattern
     /// - Returns: Some(ScoreResult) if a match is found containing a `score` between `0.0` (exact match) and `1` (not a match), and `ranges` of the matched characters. If no match is found will return None.
-    /// # Example: 
+    /// # Example:
     /// ```no_run
     /// use fuse_rust::{ Fuse };
     /// let fuse = Fuse::default();
     /// let pattern = fuse.create_pattern("some text");
     /// fuse.search(pattern.as_ref(), "some string");
     /// ```
-    pub fn search(
-        &self,
-        pattern: Option<&Pattern>,
-        string: &str
-    ) -> Option<ScoreResult> {
+    pub fn search(&self, pattern: Option<&Pattern>, string: &str) -> Option<ScoreResult> {
         let pattern = pattern?;
-        
+
         if self.tokenize {
-            let word_patterns = pattern.text.split_whitespace().filter_map(
-                |x| self.create_pattern(x)
-            );
+            let word_patterns = pattern
+                .text
+                .split_whitespace()
+                .filter_map(|x| self.create_pattern(x));
 
             let full_pattern_result = self.search_util(&pattern, string);
 
-            let (length, results) = word_patterns.fold((0, full_pattern_result), |(n, mut total_result), pattern| {
-                let result = self.search_util(&pattern, string);
-                total_result.score += result.score;
-                total_result.ranges.append(&mut result.ranges.clone());
-                (n+1, total_result)
-            });
+            let (length, results) = word_patterns.fold(
+                (0, full_pattern_result),
+                |(n, mut total_result), pattern| {
+                    let result = self.search_util(&pattern, string);
+                    total_result.score += result.score;
+                    total_result.ranges.append(&mut result.ranges.clone());
+                    (n + 1, total_result)
+                },
+            );
 
-            let averaged_result = ScoreResult{
+            let averaged_result = ScoreResult {
                 score: results.score / (length + 1) as f64,
-                ranges: results.ranges
+                ranges: results.ranges,
             };
 
-            return if averaged_result.score == 1. {None} else {Some(averaged_result)};
-
+            return if averaged_result.score == 1. {
+                None
+            } else {
+                Some(averaged_result)
+            };
         } else {
             let result = self.search_util(&pattern, string);
-            return if result.score == 1. {None} else {Some(result)};
+            return if result.score == 1. {
+                None
+            } else {
+                Some(result)
+            };
         }
     }
 }
 
 /// Implementable trait for user defined structs, requires two methods to me implemented.
-/// A properties method that should return a list of FuseProperties. 
-/// and a lookup method which should return the value of field, provided the field name. 
-/// # Examples: 
-/// Usage: 
+/// A properties method that should return a list of FuseProperties.
+/// and a lookup method which should return the value of field, provided the field name.
+/// # Examples:
+/// Usage:
 /// ```no_run
 /// use fuse_rust::{ Fuse, Fuseable, FuseProperty };
 /// struct Book<'a> {
@@ -422,9 +422,9 @@ impl Fuse {
 /// ```
 pub trait Fuseable {
     /// Returns a list of FuseProperty that contains the field name and its corresponding weight
-    fn properties(&self) -> Vec<FuseProperty> ;
+    fn properties(&self) -> Vec<FuseProperty>;
     /// Provided a field name as argument, returns the value of the field. eg book.loopkup("author") === book.author
-    fn lookup(&self, key: &str) -> Option<&str> ;
+    fn lookup(&self, key: &str) -> Option<&str>;
 }
 
 impl Fuse {
@@ -433,7 +433,7 @@ impl Fuse {
     ///   - text: the text string to search for.
     ///   - string: The string in which to search for the pattern
     /// - Returns: Some(ScoreResult) if a match is found, containing a `score` between `0.0` (exact match) and `1` (not a match), and `ranges` of the matched characters. Otherwise if a match is not found, returns None.
-    /// # Examples: 
+    /// # Examples:
     /// ```no_run
     /// use fuse_rust::{ Fuse };
     /// let fuse = Fuse::default();
@@ -448,7 +448,7 @@ impl Fuse {
     /// fuse.search(pattern.as_ref(), "another string");
     /// fuse.search(pattern.as_ref(), "yet another string");
     /// ```
-    pub fn search_text_in_string(&self, text: &str, string: &str) -> Option<ScoreResult>{
+    pub fn search_text_in_string(&self, text: &str, string: &str) -> Option<ScoreResult> {
         self.search(self.create_pattern(text).as_ref(), string)
     }
 
@@ -457,9 +457,9 @@ impl Fuse {
     /// - Parameters:
     ///   - text: The pattern string to search for
     ///   - list: Iterable over string references
-    /// - Returns: Vec<SearchResult> containing Search results corresponding to matches found, with its `index`, its `score`, and the `ranges` of the matched characters. 
-    /// 
-    /// # Example: 
+    /// - Returns: Vec<SearchResult> containing Search results corresponding to matches found, with its `index`, its `score`, and the `ranges` of the matched characters.
+    ///
+    /// # Example:
     /// ```no_run
     /// use fuse_rust::{ Fuse };
     /// let fuse = Fuse::default();
@@ -472,22 +472,20 @@ impl Fuse {
     /// let results = fuse.search_text_in_iterable("Te silm", books.iter());
     /// ```
     pub fn search_text_in_iterable<It>(&self, text: &str, list: It) -> Vec<SearchResult>
-    where 
+    where
         It: IntoIterator,
-        It::Item: AsRef<str>
+        It::Item: AsRef<str>,
     {
         let pattern = self.create_pattern(text);
-        let mut items = vec!();
-        
+        let mut items = vec![];
+
         for (index, item) in list.into_iter().enumerate() {
             if let Some(result) = self.search(pattern.as_ref(), item.as_ref()) {
-                items.push(
-                    SearchResult {
-                        index: index,
-                        score: result.score,
-                        ranges: result.ranges,
-                    }
-                )
+                items.push(SearchResult {
+                    index: index,
+                    score: result.score,
+                    ranges: result.ranges,
+                })
             }
         }
         items.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
@@ -501,8 +499,8 @@ impl Fuse {
     ///   - list: &[&str] A reference to a slice of string references.
     ///   - chunkSize: The size of a single chunk of the array. For example, if the slice has `1000` items, it may be useful to split the work into 10 chunks of 100. This should ideally speed up the search logic.
     ///   - completion: The handler which is executed upon completion
-    /// 
-    /// # Example: 
+    ///
+    /// # Example:
     /// ```no_run
     /// use fuse_rust::{ Fuse, SearchResult };
     /// let fuse = Fuse::default();
@@ -516,29 +514,33 @@ impl Fuse {
     ///     dbg!(x);
     /// });
     /// ```
-    pub fn search_text_in_string_list(&self, text: &str, list: &[&str], chunk_size: usize, completion: &dyn Fn(Vec<SearchResult>)){
+    pub fn search_text_in_string_list(
+        &self,
+        text: &str,
+        list: &[&str],
+        chunk_size: usize,
+        completion: &dyn Fn(Vec<SearchResult>),
+    ) {
         let pattern = Arc::new(self.create_pattern(text));
-        
-        let item_queue = Arc::new(Mutex::new(Some(vec!())));
+
+        let item_queue = Arc::new(Mutex::new(Some(vec![])));
         let count = list.len();
-        
+
         thread::scope(|scope| {
             (0..=count).step_by(chunk_size).for_each(|offset| {
                 let chunk = &list[offset..count.min(offset + chunk_size)];
                 let queue_ref = Arc::clone(&item_queue);
                 let pattern_ref = Arc::clone(&pattern);
-                scope.spawn(move|_| {
-                    let mut chunk_items = vec!() ;
-                    
+                scope.spawn(move |_| {
+                    let mut chunk_items = vec![];
+
                     for (index, item) in chunk.into_iter().enumerate() {
                         if let Some(result) = self.search((*pattern_ref).as_ref(), item) {
-                            chunk_items.push(
-                                SearchResult {
-                                    index: offset + index,
-                                    score: result.score,
-                                    ranges: result.ranges,
-                                }
-                            );
+                            chunk_items.push(SearchResult {
+                                index: offset + index,
+                                score: result.score,
+                                ranges: result.ranges,
+                            });
                         }
                     }
 
@@ -548,14 +550,19 @@ impl Fuse {
                     }
                 });
             });
-        }).unwrap();
+        })
+        .unwrap();
 
-        let mut items = Arc::try_unwrap(item_queue).ok().unwrap().into_inner().unwrap().unwrap();
+        let mut items = Arc::try_unwrap(item_queue)
+            .ok()
+            .unwrap()
+            .into_inner()
+            .unwrap()
+            .unwrap();
         items.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
         completion(items);
     }
 
-        
     /// Searches for a text pattern in an array of `Fuseable` objects.
     /// - Parameters:
     ///   - text: The pattern string to search for
@@ -578,7 +585,7 @@ impl Fuse {
     ///             FuseProperty{value: String::from("author"), weight: 0.7},
     ///         )
     ///     }
-    /// 
+    ///
     ///     fn lookup(&self, key: &str) -> Option<&str> {
     ///         return match key {
     ///             "title" => Some(self.title),
@@ -597,30 +604,45 @@ impl Fuse {
     ///     let results = fuse.search_text_in_fuse_list("man", &books);
     /// # }
     /// ```
-    pub fn search_text_in_fuse_list(&self, text: &str, list: &[impl Fuseable]) -> Vec<FuseableSearchResult> {
+    pub fn search_text_in_fuse_list(
+        &self,
+        text: &str,
+        list: &[impl Fuseable],
+    ) -> Vec<FuseableSearchResult> {
         let pattern = self.create_pattern(text);
-        let mut result = vec!();
+        let mut result = vec![];
         for (index, item) in list.iter().enumerate() {
-            let mut scores = vec!();
+            let mut scores = vec![];
             let mut total_score = 0.0;
 
-            let mut property_results = vec!();
+            let mut property_results = vec![];
             item.properties().iter().for_each(|property| {
                 let value = item.lookup(&property.value).unwrap_or_else(|| {
-                    println!("Lookup doesnt contain requested value => {}.", &property.value);
+                    println!(
+                        "Lookup doesnt contain requested value => {}.",
+                        &property.value
+                    );
                     ""
                 });
                 if let Some(result) = self.search(pattern.as_ref(), &value) {
-                    let weight = if property.weight == 1.0 { 1.0 } else { 1.0 - property.weight };
-                    let score = if result.score == 0.0 && weight == 1.0 { 0.001 } else { result.score } * weight;
+                    let weight = if property.weight == 1.0 {
+                        1.0
+                    } else {
+                        1.0 - property.weight
+                    };
+                    let score = if result.score == 0.0 && weight == 1.0 {
+                        0.001
+                    } else {
+                        result.score
+                    } * weight;
                     total_score += score;
-                    
+
                     scores.push(score);
 
-                    property_results.push(FResult{
+                    property_results.push(FResult {
                         value: String::from(&property.value),
                         score: score,
-                        ranges: result.ranges
+                        ranges: result.ranges,
                     });
                 }
             });
@@ -629,12 +651,12 @@ impl Fuse {
             }
 
             let count = scores.len() as f64;
-            result.push(FuseableSearchResult{
+            result.push(FuseableSearchResult {
                 index: index,
                 score: total_score / count,
                 results: property_results,
             })
-        };
+        }
 
         result.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
         return result;
@@ -663,7 +685,7 @@ impl Fuse {
     ///             FuseProperty{value: String::from("author"), weight: 0.7},
     ///         )
     ///     }
-    /// 
+    ///
     ///     fn lookup(&self, key: &str) -> Option<&str> {
     ///         return match key {
     ///             "title" => Some(self.title),
@@ -684,53 +706,67 @@ impl Fuse {
     ///     });
     /// # }
     /// ```
-    pub fn search_text_in_fuse_list_with_chunk_size<T>(&self, text: &str, list: &[T], chunk_size: usize, completion: &dyn Fn(Vec<FuseableSearchResult>))
-    where T:Fuseable + std::marker::Sync{
+    pub fn search_text_in_fuse_list_with_chunk_size<T>(
+        &self,
+        text: &str,
+        list: &[T],
+        chunk_size: usize,
+        completion: &dyn Fn(Vec<FuseableSearchResult>),
+    ) where
+        T: Fuseable + std::marker::Sync,
+    {
         let pattern = Arc::new(self.create_pattern(text));
-        
-        let item_queue = Arc::new(Mutex::new(Some(vec!())));
+
+        let item_queue = Arc::new(Mutex::new(Some(vec![])));
         let count = list.len();
-        
+
         thread::scope(|scope| {
             (0..=count).step_by(chunk_size).for_each(|offset| {
                 let chunk = &list[offset..count.min(offset + chunk_size)];
                 let queue_ref = Arc::clone(&item_queue);
                 let pattern_ref = Arc::clone(&pattern);
-                scope.spawn(move|_| {
-                    let mut chunk_items = vec!() ;
-                    
+                scope.spawn(move |_| {
+                    let mut chunk_items = vec![];
+
                     for (index, item) in chunk.into_iter().enumerate() {
-                        let mut scores = vec!();
+                        let mut scores = vec![];
                         let mut total_score = 0.0;
 
-                        let mut property_results = vec!();
+                        let mut property_results = vec![];
                         item.properties().iter().for_each(|property| {
                             let value = item.lookup(&property.value).unwrap_or_else(|| {
-                                println!("Lookup doesnt contain requested value => {}.", &property.value);
+                                println!(
+                                    "Lookup doesnt contain requested value => {}.",
+                                    &property.value
+                                );
                                 ""
                             });
                             if let Some(result) = self.search((*pattern_ref).as_ref(), &value) {
-                                let weight = if property.weight == 1.0 { 1.0 } else { 1.0 - property.weight };
+                                let weight = if property.weight == 1.0 {
+                                    1.0
+                                } else {
+                                    1.0 - property.weight
+                                };
                                 // let score = if result.score == 0.0 && weight == 1.0 { 0.001 } else { result.score } * weight;
                                 let score = result.score * weight;
                                 total_score += score;
-                                
+
                                 scores.push(score);
 
-                                property_results.push(FResult{
+                                property_results.push(FResult {
                                     value: String::from(&property.value),
                                     score: score,
-                                    ranges: result.ranges
+                                    ranges: result.ranges,
                                 });
                             }
                         });
-                        
+
                         if scores.is_empty() {
                             continue;
                         }
-            
+
                         let count = scores.len() as f64;
-                        chunk_items.push(FuseableSearchResult{
+                        chunk_items.push(FuseableSearchResult {
                             index: index,
                             score: total_score / count,
                             results: property_results,
@@ -743,9 +779,15 @@ impl Fuse {
                     }
                 });
             });
-        }).unwrap();
+        })
+        .unwrap();
 
-        let mut items = Arc::try_unwrap(item_queue).ok().unwrap().into_inner().unwrap().unwrap();
+        let mut items = Arc::try_unwrap(item_queue)
+            .ok()
+            .unwrap()
+            .into_inner()
+            .unwrap()
+            .unwrap();
         items.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
         completion(items);
     }
