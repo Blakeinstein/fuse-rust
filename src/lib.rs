@@ -373,14 +373,14 @@ impl Fuse {
                 ranges: results.ranges,
             };
 
-            if averaged_result.score == 1. {
+            if (averaged_result.score - 1.0).abs() < 0.00001 {
                 None
             } else {
                 Some(averaged_result)
             }
         } else {
             let result = self.search_util(&pattern, string);
-            if result.score == 1. {
+            if (result.score - 1.0).abs() < 0.00001 {
                 None
             } else {
                 Some(result)
@@ -569,6 +569,8 @@ impl Fuse {
     ///
     /// # Example
     /// ```no_run
+    /// # use fuse_rust::{ Fuse, Fuseable, FuseProperty };
+    /// 
     /// struct Book<'a> {
     ///    title: &'a str,
     ///    author: &'a str,
@@ -589,16 +591,15 @@ impl Fuse {
     ///             _ => None
     ///         }
     ///     }
-    /// }
-    /// # fn main() {    
-    ///     let books = [
-    ///         Book{author: "John X", title: "Old Man's War fiction"},
-    ///         Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
-    ///     ];
-    ///     
-    ///     let fuse = Fuse::default();
-    ///     let results = fuse.search_text_in_fuse_list("man", &books);
-    /// # }
+    /// }   
+    /// let books = [
+    ///     Book{author: "John X", title: "Old Man's War fiction"},
+    ///     Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
+    /// ];
+    /// 
+    /// let fuse = Fuse::default();
+    /// let results = fuse.search_text_in_fuse_list("man", &books);
+    /// 
     /// ```
     pub fn search_text_in_fuse_list(
         &self,
@@ -620,12 +621,12 @@ impl Fuse {
                     ));
                 });
                 if let Some(result) = self.search(pattern.as_ref(), &value) {
-                    let weight = if property.weight == 1.0 {
+                    let weight = if (property.weight - 1.0).abs() < 0.00001 {
                         1.0
                     } else {
                         1.0 - property.weight
                     };
-                    let score = if result.score == 0.0 && weight == 1.0 {
+                    let score = if result.score == 0.0 && (weight - 1.0).abs() < f64::EPSILON {
                         0.001
                     } else {
                         result.score
@@ -667,6 +668,8 @@ impl Fuse {
     ///
     /// # Example
     /// ```no_run
+    /// # use fuse_rust::{ Fuse, Fuseable, FuseProperty, FuseableSearchResult };
+    /// 
     /// struct Book<'a> {
     ///    title: &'a str,
     ///    author: &'a str,
@@ -687,18 +690,16 @@ impl Fuse {
     ///             _ => None
     ///         }
     ///     }
-    /// }
-    /// # fn main() {    
-    ///     let books = [
-    ///         Book{author: "John X", title: "Old Man's War fiction"},
-    ///         Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
-    ///     ];
-    ///     
-    ///     let fuse = Fuse::default();
-    ///     let results = fuse.search_text_in_fuse_list_with_chunk_size("man", &books, 1, &|x: Vec<FuseableSearchResult>| {
-    ///         dbg!(x);
-    ///     });
-    /// # }
+    /// }    
+    /// let books = [
+    ///     Book{author: "John X", title: "Old Man's War fiction"},
+    ///     Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
+    /// ];
+    /// 
+    /// let fuse = Fuse::default();
+    /// let results = fuse.search_text_in_fuse_list_with_chunk_size("man", &books, 1, &|x: Vec<FuseableSearchResult>| {
+    ///     dbg!(x);
+    /// });
     /// ```
     pub fn search_text_in_fuse_list_with_chunk_size<T>(
         &self,
@@ -735,7 +736,7 @@ impl Fuse {
                                 ))
                             });
                             if let Some(result) = self.search((*pattern_ref).as_ref(), &value) {
-                                let weight = if property.weight == 1.0 {
+                                let weight = if (property.weight - 1.0).abs() < 0.00001 {
                                     1.0
                                 } else {
                                     1.0 - property.weight
