@@ -281,14 +281,15 @@ impl Fuse {
 
             for j in (start as u32..=finish as u32).rev() {
                 let current_location: usize = (j - 1) as usize;
-                let char_match: u32 = *(
-                    if current_location < text_count {
-                        current_location_index = current_location_index
-                            .checked_sub(1)
-                            .unwrap_or(current_location);
-                        pattern.alphabet.get(&string_chars[current_location_index])
-                    } else { None }
-                ).unwrap_or(&0);
+                let char_match: u32 = *(if current_location < text_count {
+                    current_location_index = current_location_index
+                        .checked_sub(1)
+                        .unwrap_or(current_location);
+                    pattern.alphabet.get(&string_chars[current_location_index])
+                } else {
+                    None
+                })
+                .unwrap_or(&0);
 
                 if char_match != 0 {
                     match_mask_arr[current_location] = 1;
@@ -570,7 +571,7 @@ impl Fuse {
     /// # Example
     /// ```no_run
     /// # use fuse_rust::{ Fuse, Fuseable, FuseProperty };
-    /// 
+    ///
     /// struct Book<'a> {
     ///    title: &'a str,
     ///    author: &'a str,
@@ -596,10 +597,10 @@ impl Fuse {
     ///     Book{author: "John X", title: "Old Man's War fiction"},
     ///     Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
     /// ];
-    /// 
+    ///
     /// let fuse = Fuse::default();
     /// let results = fuse.search_text_in_fuse_list("man", &books);
-    /// 
+    ///
     /// ```
     pub fn search_text_in_fuse_list(
         &self,
@@ -669,7 +670,7 @@ impl Fuse {
     /// # Example
     /// ```no_run
     /// # use fuse_rust::{ Fuse, Fuseable, FuseProperty, FuseableSearchResult };
-    /// 
+    ///
     /// struct Book<'a> {
     ///    title: &'a str,
     ///    author: &'a str,
@@ -695,7 +696,7 @@ impl Fuse {
     ///     Book{author: "John X", title: "Old Man's War fiction"},
     ///     Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
     /// ];
-    /// 
+    ///
     /// let fuse = Fuse::default();
     /// let results = fuse.search_text_in_fuse_list_with_chunk_size("man", &books, 1, &|x: Vec<FuseableSearchResult>| {
     ///     dbg!(x);
