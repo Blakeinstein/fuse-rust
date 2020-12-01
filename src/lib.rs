@@ -203,7 +203,7 @@ impl Fuse {
             string.to_ascii_lowercase()
         };
         let string_chars = string.chars().collect::<Vec<_>>();
-        let text_length = string.len();
+        let text_length = string_chars.len();
 
         // Exact match
         if pattern.text == string {
@@ -244,7 +244,7 @@ impl Fuse {
         let mut bin_max = pattern.len + text_length;
         let mut last_bit_arr = vec![];
 
-        let text_count = string.len();
+        let text_count = string_chars.len();
 
         for i in 0..pattern.len {
             let mut bin_min = 0;
