@@ -5,6 +5,8 @@
 //! A super lightweight fuzzy-search library.
 //! A port of [Fuse-Swift](https://github.com/krisk/fuse-swift) written purely in rust!
 
+#[cfg(test)]
+mod tests;
 mod utils;
 
 /// Required for scoped threads
