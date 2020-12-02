@@ -13,5 +13,7 @@ fn multibyte_chars() {
         "コンニチハ",
     ];
 
-    assert!(Fuse::default().search_text_in_iterable(pat, s.iter()).is_empty());
+    assert!(Fuse::default()
+        .search_text_in_iterable(pat, s.iter())
+        .is_empty());
 }
