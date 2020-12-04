@@ -10,7 +10,7 @@ mod tests;
 mod utils;
 
 /// Required for scoped threads
-use crossbeam::thread;
+use crossbeam_utils::thread;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
