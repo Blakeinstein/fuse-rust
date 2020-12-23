@@ -288,7 +288,13 @@ impl Fuse {
                     current_location_index = current_location_index
                         .checked_sub(1)
                         .unwrap_or(current_location);
-                    pattern.alphabet.get(&(string.as_bytes().iter().nth(current_location_index).unwrap()))
+                    pattern.alphabet.get(
+                        &(string
+                            .as_bytes()
+                            .iter()
+                            .nth(current_location_index)
+                            .unwrap()),
+                    )
                 } else {
                     None
                 })
@@ -297,7 +303,7 @@ impl Fuse {
                 if char_match != 0 {
                     match_mask_arr[current_location] = 1;
                 }
-                
+
                 let j2 = j as usize;
                 bit_arr[j2] = ((bit_arr[j2 + 1] << 1) | 1) & char_match;
                 if i > 0 {
@@ -332,7 +338,7 @@ impl Fuse {
 
             last_bit_arr = bit_arr.clone();
         }
-        
+
         ScoreResult {
             score,
             ranges: utils::find_ranges(&match_mask_arr).unwrap(),

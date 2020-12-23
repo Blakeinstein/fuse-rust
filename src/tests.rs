@@ -28,8 +28,5 @@ fn multibyte_chars_indices() {
     let x = fuse.search(pat.as_ref(), s).unwrap();
     let r = &x.ranges[0];
 
-    assert_eq!(
-        &s[r.start..r.end],
-        needle
-    );
+    assert_eq!(&s[r.start..r.end], needle);
 }
