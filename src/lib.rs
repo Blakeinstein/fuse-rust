@@ -79,8 +79,8 @@ impl FuseProperty {
 pub struct Pattern {
     text: String,
     len: usize,
-    mask: u32,
-    alphabet: HashMap<char, u32>,
+    mask: u64,
+    alphabet: HashMap<u8, u64>,
 }
 
 /// Return type for performing a search on a list of strings
@@ -182,12 +182,13 @@ impl Fuse {
         } else {
             &lowercase
         };
-        let len = pattern.len();
+        let pattern_chars = pattern.as_bytes();
+        let len = pattern_chars.len();
 
         if len == 0 {
             None
         } else {
-            let alphabet = utils::calculate_pattern_alphabet(&pattern);
+            let alphabet = utils::calculate_pattern_alphabet(&pattern_chars);
             let new_pattern = Pattern {
                 text: String::from(pattern),
                 len,
@@ -204,8 +205,9 @@ impl Fuse {
         } else {
             string.to_ascii_lowercase()
         };
-        let string_chars = string.chars().collect::<Vec<_>>();
-        let text_length = string_chars.len();
+
+        let string_chars = string.as_bytes();
+        let text_length = string.len();
 
         // Exact match
         if pattern.text == string {
@@ -280,14 +282,13 @@ impl Fuse {
             };
 
             let mut current_location_index: usize = 0;
-
-            for j in (start as u32..=finish as u32).rev() {
+            for j in (start as u64..=finish as u64).rev() {
                 let current_location: usize = (j - 1) as usize;
-                let char_match: u32 = *(if current_location < text_count {
+                let char_match: u64 = *(if current_location < text_count {
                     current_location_index = current_location_index
                         .checked_sub(1)
                         .unwrap_or(current_location);
-                    pattern.alphabet.get(&string_chars[current_location_index])
+                    pattern.alphabet.get(&(string.as_bytes().iter().nth(current_location_index).unwrap()))
                 } else {
                     None
                 })
@@ -296,11 +297,11 @@ impl Fuse {
                 if char_match != 0 {
                     match_mask_arr[current_location] = 1;
                 }
-
+                
                 let j2 = j as usize;
                 bit_arr[j2] = ((bit_arr[j2 + 1] << 1) | 1) & char_match;
                 if i > 0 {
-                    bit_arr[j2] |= (((last_bit_arr[j2 + 1] | last_bit_arr[j2]) << 1 as u32) | 1)
+                    bit_arr[j2] |= (((last_bit_arr[j2 + 1] | last_bit_arr[j2]) << 1 as u64) | 1)
                         | last_bit_arr[j2 + 1];
                 };
 
@@ -331,7 +332,7 @@ impl Fuse {
 
             last_bit_arr = bit_arr.clone();
         }
-
+        
         ScoreResult {
             score,
             ranges: utils::find_ranges(&match_mask_arr).unwrap(),
