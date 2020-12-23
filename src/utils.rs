@@ -13,7 +13,7 @@ pub fn calculate_score(pattern_length: usize, e: i32, x: i32, loc: i32, distance
 /// Initializes the alphabet for the Bitap algorithm
 /// - Parameter pattern: The text to encode.
 /// - Returns: Hashmap of character locations.
-pub fn calculate_pattern_alphabet(pattern: &str) -> HashMap<char, u32> {
+pub fn calculate_pattern_alphabet(pattern: &str) -> HashMap<char, u64> {
     let len = pattern.len();
     let mut mask = HashMap::new();
     for (i, c) in pattern.chars().enumerate() {
