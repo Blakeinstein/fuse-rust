@@ -11,6 +11,12 @@ Fuse-RS is a port of https://github.com/krisk/fuse-swift written purely in rust.
 
 ## Usage
 
+### Async
+Use the feature flag "async" to also be able to use async functions.
+```toml
+fuse-rust = { version = ..., features = ["async"]}
+```
+
 #### Initializing
 
 The first step is to create a fuse object, with the necessary parameters. Fuse::default, returns the following parameters.
