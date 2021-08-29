@@ -9,11 +9,14 @@
 mod tests;
 mod utils;
 
-/// Required for scoped threads
+#[cfg(feature = "async")]
 use crossbeam_utils::thread;
+#[cfg(feature = "async")]
+use std::sync::{Arc, Mutex};
+
+/// Required for scoped threads
 use std::collections::HashMap;
 use std::ops::Range;
-use std::sync::{Arc, Mutex};
 
 /// Defines the fuseproperty object to be returned as part of the list
 /// returned by properties() implemented by the Fuseable trait.
@@ -499,6 +502,107 @@ impl Fuse {
         items
     }
 
+    /// Searches for a text pattern in an array of `Fuseable` objects.
+    /// - Parameters:
+    ///   - text: The pattern string to search for
+    ///   - list: A list of `Fuseable` objects, i.e. structs implementing the Fuseable trait in which to search
+    /// - Returns: A list of `FuseableSearchResult` objects
+    /// Each `Fuseable` object contains a `properties` method which returns `FuseProperty` array. Each `FuseProperty` is a struct containing a `value` (the name of the field which should be included in the search), and a `weight` (how much "weight" to assign to the score)
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use fuse_rust::{ Fuse, Fuseable, FuseProperty };
+    ///
+    /// struct Book<'a> {
+    ///    title: &'a str,
+    ///    author: &'a str,
+    /// }
+    ///
+    /// impl Fuseable for Book<'_>{
+    ///     fn properties(&self) -> Vec<FuseProperty> {
+    ///         return vec!(
+    ///             FuseProperty{value: String::from("title"), weight: 0.3},
+    ///             FuseProperty{value: String::from("author"), weight: 0.7},
+    ///         )
+    ///     }
+    ///
+    ///     fn lookup(&self, key: &str) -> Option<&str> {
+    ///         return match key {
+    ///             "title" => Some(self.title),
+    ///             "author" => Some(self.author),
+    ///             _ => None
+    ///         }
+    ///     }
+    /// }   
+    /// let books = [
+    ///     Book{author: "John X", title: "Old Man's War fiction"},
+    ///     Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
+    /// ];
+    ///
+    /// let fuse = Fuse::default();
+    /// let results = fuse.search_text_in_fuse_list("man", &books);
+    ///
+    /// ```
+    pub fn search_text_in_fuse_list(
+        &self,
+        text: &str,
+        list: &[impl Fuseable],
+    ) -> Vec<FuseableSearchResult> {
+        let pattern = self.create_pattern(text);
+        let mut result = vec![];
+        for (index, item) in list.iter().enumerate() {
+            let mut scores = vec![];
+            let mut total_score = 0.0;
+
+            let mut property_results = vec![];
+            item.properties().iter().for_each(|property| {
+                let value = item.lookup(&property.value).unwrap_or_else(|| {
+                    panic!(
+                        "Lookup Failed: Lookup doesnt contain requested value => {}.",
+                        &property.value
+                    );
+                });
+                if let Some(result) = self.search(pattern.as_ref(), &value) {
+                    let weight = if (property.weight - 1.0).abs() < 0.00001 {
+                        1.0
+                    } else {
+                        1.0 - property.weight
+                    };
+                    let score = if result.score == 0.0 && (weight - 1.0).abs() < f64::EPSILON {
+                        0.001
+                    } else {
+                        result.score
+                    } * weight;
+                    total_score += score;
+
+                    scores.push(score);
+
+                    property_results.push(FResult {
+                        value: String::from(&property.value),
+                        score,
+                        ranges: result.ranges,
+                    });
+                }
+            });
+            if scores.is_empty() {
+                continue;
+            }
+
+            let count = scores.len() as f64;
+            result.push(FuseableSearchResult {
+                index,
+                score: total_score / count,
+                results: property_results,
+            })
+        }
+
+        result.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+        result
+    }
+}
+
+#[cfg(feature = "async")]
+impl Fuse {
     /// Asynchronously searches for a text pattern in a slice of string references.
     ///
     /// - Parameters:
@@ -569,106 +673,7 @@ impl Fuse {
         items.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
         completion(items);
     }
-
-    /// Searches for a text pattern in an array of `Fuseable` objects.
-    /// - Parameters:
-    ///   - text: The pattern string to search for
-    ///   - list: A list of `Fuseable` objects, i.e. structs implementing the Fuseable trait in which to search
-    /// - Returns: A list of `FuseableSearchResult` objects
-    /// Each `Fuseable` object contains a `properties` method which returns `FuseProperty` array. Each `FuseProperty` is a struct containing a `value` (the name of the field which should be included in the search), and a `weight` (how much "weight" to assign to the score)
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use fuse_rust::{ Fuse, Fuseable, FuseProperty };
-    ///
-    /// struct Book<'a> {
-    ///    title: &'a str,
-    ///    author: &'a str,
-    /// }
-    ///
-    /// impl Fuseable for Book<'_>{
-    ///     fn properties(&self) -> Vec<FuseProperty> {
-    ///         return vec!(
-    ///             FuseProperty{value: String::from("title"), weight: 0.3},
-    ///             FuseProperty{value: String::from("author"), weight: 0.7},
-    ///         )
-    ///     }
-    ///
-    ///     fn lookup(&self, key: &str) -> Option<&str> {
-    ///         return match key {
-    ///             "title" => Some(self.title),
-    ///             "author" => Some(self.author),
-    ///             _ => None
-    ///         }
-    ///     }
-    /// }   
-    /// let books = [
-    ///     Book{author: "John X", title: "Old Man's War fiction"},
-    ///     Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
-    /// ];
-    ///
-    /// let fuse = Fuse::default();
-    /// let results = fuse.search_text_in_fuse_list("man", &books);
-    ///
-    /// ```
-    pub fn search_text_in_fuse_list(
-        &self,
-        text: &str,
-        list: &[impl Fuseable],
-    ) -> Vec<FuseableSearchResult> {
-        let pattern = self.create_pattern(text);
-        let mut result = vec![];
-        for (index, item) in list.iter().enumerate() {
-            let mut scores = vec![];
-            let mut total_score = 0.0;
-
-            let mut property_results = vec![];
-            item.properties().iter().for_each(|property| {
-                let value = item.lookup(&property.value).unwrap_or_else(|| {
-                    panic!(format!(
-                        "Lookup Failed: Lookup doesnt contain requested value => {}.",
-                        &property.value
-                    ));
-                });
-                if let Some(result) = self.search(pattern.as_ref(), &value) {
-                    let weight = if (property.weight - 1.0).abs() < 0.00001 {
-                        1.0
-                    } else {
-                        1.0 - property.weight
-                    };
-                    let score = if result.score == 0.0 && (weight - 1.0).abs() < f64::EPSILON {
-                        0.001
-                    } else {
-                        result.score
-                    } * weight;
-                    total_score += score;
-
-                    scores.push(score);
-
-                    property_results.push(FResult {
-                        value: String::from(&property.value),
-                        score,
-                        ranges: result.ranges,
-                    });
-                }
-            });
-            if scores.is_empty() {
-                continue;
-            }
-
-            let count = scores.len() as f64;
-            result.push(FuseableSearchResult {
-                index,
-                score: total_score / count,
-                results: property_results,
-            })
-        }
-
-        result.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
-        result
-    }
-
-    /// Asynchronously searches for a text pattern in an array of `Fuseable` objects.
+	/// Asynchronously searches for a text pattern in an array of `Fuseable` objects.
     /// - Parameters:
     ///   - text: The pattern string to search for
     ///   - list: A list of `Fuseable` objects, i.e. structs implementing the Fuseable trait in which to search
@@ -740,10 +745,10 @@ impl Fuse {
                         let mut property_results = vec![];
                         item.properties().iter().for_each(|property| {
                             let value = item.lookup(&property.value).unwrap_or_else(|| {
-                                panic!(format!(
+                                panic!(
                                     "Lookup doesnt contain requested value => {}.",
                                     &property.value
-                                ))
+                                )
                             });
                             if let Some(result) = self.search((*pattern_ref).as_ref(), &value) {
                                 let weight = if (property.weight - 1.0).abs() < 0.00001 {

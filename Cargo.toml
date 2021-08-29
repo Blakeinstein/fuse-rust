@@ -1,6 +1,6 @@
 [package]
 name = "fuse-rust"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Blaine <rishi1998@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -16,4 +16,11 @@ Fuse-Rust is a port of Fuse-Swift, written purely in rust.
 """
 
 [dependencies]
-crossbeam-utils = "0.8.1"
+crossbeam-utils = { version = "0.8.5", optional = true }
+
+[features]
+async = [ "crossbeam-utils" ]
+
+[[example]]
+name = "chunk-search"
+required-features = ["async"]
