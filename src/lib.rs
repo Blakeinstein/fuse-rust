@@ -673,7 +673,7 @@ impl Fuse {
         items.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
         completion(items);
     }
-	/// Asynchronously searches for a text pattern in an array of `Fuseable` objects.
+    /// Asynchronously searches for a text pattern in an array of `Fuseable` objects.
     /// - Parameters:
     ///   - text: The pattern string to search for
     ///   - list: A list of `Fuseable` objects, i.e. structs implementing the Fuseable trait in which to search
