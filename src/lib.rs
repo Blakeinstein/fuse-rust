@@ -191,7 +191,7 @@ impl Fuse {
         if len == 0 {
             None
         } else {
-            let alphabet = utils::calculate_pattern_alphabet(&pattern_chars);
+            let alphabet = utils::calculate_pattern_alphabet(pattern_chars);
             let new_pattern = Pattern {
                 text: String::from(pattern),
                 len,
@@ -224,7 +224,7 @@ impl Fuse {
         let distance = self.distance;
         let mut threshold = self.threshold;
 
-        let mut best_location = string.find(&pattern.text).unwrap_or(0 as usize);
+        let mut best_location = string.find(&pattern.text).unwrap_or(0_usize);
 
         let mut match_mask_arr = vec![0; text_length];
 
@@ -292,11 +292,11 @@ impl Fuse {
                         .checked_sub(1)
                         .unwrap_or(current_location);
                     pattern.alphabet.get(
-                        &(string
+                        string
                             .as_bytes()
                             .iter()
                             .nth(current_location_index)
-                            .unwrap()),
+                            .unwrap(),
                     )
                 } else {
                     None
@@ -310,7 +310,7 @@ impl Fuse {
                 let j2 = j as usize;
                 bit_arr[j2] = ((bit_arr[j2 + 1] << 1) | 1) & char_match;
                 if i > 0 {
-                    bit_arr[j2] |= (((last_bit_arr[j2 + 1] | last_bit_arr[j2]) << 1 as u64) | 1)
+                    bit_arr[j2] |= (((last_bit_arr[j2 + 1] | last_bit_arr[j2]) << 1_u64) | 1)
                         | last_bit_arr[j2 + 1];
                 };
 
@@ -369,7 +369,7 @@ impl Fuse {
                 .split_whitespace()
                 .filter_map(|x| self.create_pattern(x));
 
-            let full_pattern_result = self.search_util(&pattern, string);
+            let full_pattern_result = self.search_util(pattern, string);
 
             let (length, results) = word_patterns.fold(
                 (0, full_pattern_result),
@@ -392,7 +392,7 @@ impl Fuse {
                 Some(averaged_result)
             }
         } else {
-            let result = self.search_util(&pattern, string);
+            let result = self.search_util(pattern, string);
             if (result.score - 1.0).abs() < 0.00001 {
                 None
             } else {
@@ -562,7 +562,7 @@ impl Fuse {
                         &property.value
                     );
                 });
-                if let Some(result) = self.search(pattern.as_ref(), &value) {
+                if let Some(result) = self.search(pattern.as_ref(), value) {
                     let weight = if (property.weight - 1.0).abs() < 0.00001 {
                         1.0
                     } else {

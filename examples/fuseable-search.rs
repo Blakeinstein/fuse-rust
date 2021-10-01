@@ -21,11 +21,11 @@ impl Fuseable for Book<'_> {
     }
 
     fn lookup(&self, key: &str) -> Option<&str> {
-        return match key {
+        match key {
             "title" => Some(self.title),
             "author" => Some(self.author),
             _ => None,
-        };
+        }
     }
 }
 fn main() {
