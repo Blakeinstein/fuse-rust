@@ -11,7 +11,7 @@ Fuse-RS is a port of https://github.com/krisk/fuse-swift written purely in rust.
 
 ## Usage
 
-> Check examples [/examples](here.)
+> Check examples [here.](/examples/)
 
 ### Async
 Use the feature flag "async" to also be able to use async functions.
