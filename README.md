@@ -10,8 +10,14 @@ Fuse is a super lightweight library which provides a simple way to do fuzzy sear
 Fuse-RS is a port of https://github.com/krisk/fuse-swift written purely in rust.
 
 ## Usage
+An example of a real use case, a search bar made using [iced](https://github.com/iced-rs/iced) is also available.
 
-> Check examples [here.](/examples/)
+Try it using 
+```shell
+cargo run --package search_bar
+```
+
+> Check examples and their source code [here.](/examples/)
 
 ### Async
 Use the feature flag "async" to also be able to use async functions.

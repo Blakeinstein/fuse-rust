@@ -21,6 +21,11 @@ crossbeam-utils = { version = "0.8.5", optional = true }
 [features]
 async = [ "crossbeam-utils" ]
 
+[workspace]
+members = [
+  "examples/search-bar"
+]
+
 [[example]]
 name = "chunk-search"
 required-features = ["async"]
