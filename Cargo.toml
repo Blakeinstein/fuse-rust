@@ -16,7 +16,7 @@ Fuse-Rust is a port of Fuse-Swift, written purely in rust.
 """
 
 [dependencies]
-crossbeam-utils = { version = "0.8.5", optional = true }
+crossbeam-utils = { version = "0.8.7", optional = true }
 
 [features]
 async = [ "crossbeam-utils" ]
