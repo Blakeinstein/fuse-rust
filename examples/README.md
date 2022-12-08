@@ -2,6 +2,8 @@
 
 ## Search Bar
 
+<img src="/.github/Demo.gif" align="right" width="400px"/>
+
 Demo made using [iced-rs](https://github.com/iced-rs/iced).
 
 You can run this example locally by running
@@ -10,7 +12,7 @@ You can run this example locally by running
 cargo run --package search_bar
 ```
 
-![Demo](/.github/Demo.gif)
+<br clear="right"/>
 
 #### Simple search
 
