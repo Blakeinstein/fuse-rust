@@ -17,7 +17,10 @@ Try it using
 cargo run --package search_bar
 ```
 
-> Check examples and their source code [here.](/examples/)
+![Demo](/.github/Demo.gif)
+
+
+> Check all available examples and their source code [here.](/examples/)
 
 ### Async
 Use the feature flag "async" to also be able to use async functions.
@@ -167,7 +170,7 @@ Currently, the chunk size is one, so the chunks of size 1 will be run on seperat
     });
 ```
 
-#### Example 5
+#### Example 4
 
 You can look into examples/chunk-search.rs for the source code, and can run the same with:
 
