@@ -202,6 +202,7 @@ impl Fuse {
         }
     }
 
+    #[allow(clippy::single_range_in_vec_init)]
     fn search_util(&self, pattern: &Pattern, string: &str) -> ScoreResult {
         let string = if self.is_case_sensitive {
             String::from(string)
@@ -216,7 +217,7 @@ impl Fuse {
         if pattern.text == string {
             return ScoreResult {
                 score: 0.,
-                ranges: vec![0..text_length as usize],
+                ranges: vec![0..text_length],
             };
         }
 
