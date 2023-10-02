@@ -30,3 +30,22 @@ fn multibyte_chars_indices() {
 
     assert_eq!(&s[r.start..r.end], needle);
 }
+
+#[test]
+fn full_match_higher() {
+    let s = &["Syrup", "Syrup2", "Live", "Live2", "Live3"];
+
+    let fuse = Fuse::default();
+
+    let result1 = fuse.search_text_in_iterable("Syrup", s.iter());
+
+    assert_eq!(result1.len(), 2);
+    assert_eq!(result1[0].index, 0);
+    assert_eq!(result1[1].index, 1);
+
+    let result2 = fuse.search_text_in_iterable("live", s.iter());
+
+    assert_eq!(result2.len(), 3);
+    assert_eq!(result2[0].index, 2);
+    assert_eq!(result2[1].score, result2[2].score);
+}
