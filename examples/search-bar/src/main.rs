@@ -1,5 +1,5 @@
 use iced::widget::{column, container, row, scrollable, text, text_input};
-use iced::{Alignment, Color, Element, Length, Sandbox, Settings};
+use iced::{application, Alignment, Color, Element, Length};
 use once_cell::sync::Lazy;
 
 use fuse_rust::{Fuse, SearchResult};
@@ -35,7 +35,7 @@ const BOOKS: &'static [&'static str] = &[
 static INPUT_ID: Lazy<text_input::Id> = Lazy::new(text_input::Id::unique);
 
 pub fn main() -> iced::Result {
-    Example::run(Settings::default())
+    application("Fuse-Rust search bar demo", Example::update, Example::view).run()
 }
 
 struct Example<'a> {
@@ -50,10 +50,8 @@ enum Message {
     SearchQuery(String),
 }
 
-impl Sandbox for Example<'_> {
-    type Message = Message;
-
-    fn new() -> Self {
+impl Default for Example<'_> {
+    fn default() -> Self {
         Self {
             search_query: String::default(),
             book_list: BOOKS.to_vec(),
@@ -61,11 +59,9 @@ impl Sandbox for Example<'_> {
             fuse_instance: Fuse::default(),
         }
     }
+}
 
-    fn title(&self) -> String {
-        String::from("Fuse-Rust search bar demo")
-    }
-
+impl Example<'_> {
     fn update(&mut self, message: Message) {
         match message {
             Message::SearchQuery(query) => {
@@ -83,8 +79,9 @@ impl Sandbox for Example<'_> {
     }
 
     fn view(&self) -> Element<Message> {
-        let query_box = text_input("Search query:", &self.search_query, Message::SearchQuery)
+        let query_box = text_input("Search query:", &self.search_query)
             .id(INPUT_ID.clone())
+            .on_input(|input| Message::SearchQuery(input))
             .padding(15)
             .size(16);
 
@@ -93,7 +90,7 @@ impl Sandbox for Example<'_> {
                 .iter()
                 .enumerate()
                 .map(|(i, res)| view_search_result(self.book_list[res.index], res, i + 1))
-                .collect(),
+                .collect::<Vec<_>>(),
             None => self
                 .book_list
                 .iter()
@@ -111,13 +108,13 @@ impl Sandbox for Example<'_> {
         .spacing(10)
         .width(Length::Fill)
         .height(Length::Fill)
-        .align_items(Alignment::Center);
+        .align_x(Alignment::Center);
 
         container(content)
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(40)
-            .center_x()
+            .center_x(Length::Fill)
             .into()
     }
 }
@@ -151,7 +148,7 @@ fn view_search_result<'a>(
     text_elements.extend(segments.iter().map(|(range, is_match)| {
         let text_label = text(String::from(&book_name[range.clone()])).size(20);
         if *is_match {
-            text_label.style(Color::from([1.0, 0.2, 0.2])).into()
+            text_label.color(Color::from_rgb(1.0, 0.2, 0.2)).into()
         } else {
             text_label.into()
         }

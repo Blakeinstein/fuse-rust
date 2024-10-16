@@ -1,6 +1,6 @@
 [package]
 name = "fuse-rust"
-version = "0.3.2"
+version = "0.4.0"
 authors = ["Blaine <rishi1998@gmail.com>"]
 edition = "2021"
 license = "MIT"
@@ -9,23 +9,34 @@ documentation = "https://docs.rs/fuse-rust"
 repository = "https://github.com/Blakeinstein/fuse-rust"
 homepage = "https://github.com/Blakeinstein/fuse-rust"
 categories = ["algorithms", "text-processing", "gui"]
-keywords = ["weighted-search", "search", "bitap", "fuzzy-search", "fuzzy-matching"]
+keywords = [
+  "weighted-search",
+  "search",
+  "bitap",
+  "fuzzy-search",
+  "fuzzy-matching",
+]
 description = """
 Fuse is a super lightweight library which provides a simple way to do fuzzy searching.
 Fuse-Rust is a port of Fuse-Swift, written purely in rust.
 """
 
 [dependencies]
-crossbeam-utils = { version = "0.8.14", optional = true }
+crossbeam-utils = { version = "0.8", optional = true }
+rayon = { version = "1", optional = true }
 
 [features]
-async = [ "crossbeam-utils" ]
+default = ["rayon"]
+async = ["crossbeam-utils"]
+rayon = ["dep:rayon"]
 
 [workspace]
-members = [
-  "examples/search-bar"
-]
+members = ["examples/search-bar"]
 
 [[example]]
 name = "chunk-search"
 required-features = ["async"]
+
+[[example]]
+name = "chunk-search-rayon"
+required-features = ["rayon"]
