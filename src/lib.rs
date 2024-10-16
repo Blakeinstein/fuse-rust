@@ -293,13 +293,9 @@ impl Fuse {
                     current_location_index = current_location_index
                         .checked_sub(1)
                         .unwrap_or(current_location);
-                    pattern.alphabet.get(
-                        string
-                            .as_bytes()
-                            .iter()
-                            .nth(current_location_index)
-                            .unwrap(),
-                    )
+                    pattern
+                        .alphabet
+                        .get(string.as_bytes().get(current_location_index).unwrap())
                 } else {
                     None
                 })
@@ -509,7 +505,7 @@ impl Fuse {
     ///   - text: The pattern string to search for
     ///   - list: A list of `Fuseable` objects, i.e. structs implementing the Fuseable trait in which to search
     /// - Returns: A list of `FuseableSearchResult` objects
-    /// Each `Fuseable` object contains a `properties` method which returns `FuseProperty` array. Each `FuseProperty` is a struct containing a `value` (the name of the field which should be included in the search), and a `weight` (how much "weight" to assign to the score)
+    ///   Each `Fuseable` object contains a `properties` method which returns `FuseProperty` array. Each `FuseProperty` is a struct containing a `value` (the name of the field which should be included in the search), and a `weight` (how much "weight" to assign to the score)
     ///
     /// # Example
     /// ```no_run
@@ -623,7 +619,7 @@ impl Fuse {
     ///     "The Lost Symbol"
     /// ];
     ///
-    /// fuse.search_text_in_string_list("Te silm", &books, 100 as usize, &|x: Vec<SearchResult>| {
+    /// fuse.search_text_in_string_list_rayon("Te silm", &books, 100 as usize, &|x: Vec<SearchResult>| {
     ///     dbg!(x);
     /// });
     /// ```
@@ -713,11 +709,11 @@ impl Fuse {
     /// ];
     ///
     /// let fuse = Fuse::default();
-    /// let results = fuse.search_text_in_fuse_list_with_chunk_size("man", &books, 1, &|x: Vec<FuseableSearchResult>| {
+    /// let results = fuse.search_text_in_fuse_list_with_chunk_size_rayon("man", &books, 1, &|x: Vec<FuseableSearchResult>| {
     ///     dbg!(x);
     /// });
     /// ```
-    pub fn search_text_in_fuse_list_with_chunk_size<T>(
+    pub fn search_text_in_fuse_list_with_chunk_size_rayon<T>(
         &self,
         text: &str,
         list: &[T],
@@ -801,7 +797,6 @@ impl Fuse {
         completion(items);
     }
 }
-
 
 #[cfg(feature = "async")]
 impl Fuse {

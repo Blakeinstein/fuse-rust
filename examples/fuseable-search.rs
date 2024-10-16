@@ -8,7 +8,7 @@ struct Book<'a> {
 
 impl Fuseable for Book<'_> {
     fn properties(&self) -> Vec<FuseProperty> {
-        return vec![
+        vec![
             FuseProperty {
                 value: String::from("title"),
                 weight: 0.3,
@@ -17,7 +17,7 @@ impl Fuseable for Book<'_> {
                 value: String::from("author"),
                 weight: 0.7,
             },
-        ];
+        ]
     }
 
     fn lookup(&self, key: &str) -> Option<&str> {

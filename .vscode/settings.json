@@ -1,3 +1,6 @@
 {
-  "conventionalCommits.scopes": ["search-algo", "code"]
+  "conventionalCommits.scopes": [
+    "search-algo",
+    "code"
+  ]
 }
