@@ -26,6 +26,7 @@ crossbeam-utils = { version = "0.8", optional = true }
 rayon = { version = "1", optional = true }
 
 [features]
+default = ["rayon"]
 async = ["crossbeam-utils"]
 rayon = ["dep:rayon"]
 
