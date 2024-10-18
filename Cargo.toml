@@ -36,3 +36,7 @@ members = ["examples/search-bar"]
 [[example]]
 name = "chunk-search"
 required-features = ["async"]
+
+[[example]]
+name = "chunk-search-rayon"
+required-features = ["rayon"]
