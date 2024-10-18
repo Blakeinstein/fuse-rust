@@ -676,7 +676,7 @@ impl Fuse {
     ///   - list: A list of `Fuseable` objects, i.e. structs implementing the Fuseable trait in which to search
     ///   - chunkSize: The size of a single chunk of the array. For example, if the array has `1000` items, it may be useful to split the work into 10 chunks of 100. This should ideally speed up the search logic. Defaults to `100`.
     ///   - completion: The handler which is executed upon completion
-    /// Each `Fuseable` object contains a `properties` method which returns `FuseProperty` array. Each `FuseProperty` is a struct containing a `value` (the name of the field which should be included in the search), and a `weight` (how much "weight" to assign to the score)
+    ///     Each `Fuseable` object contains a `properties` method which returns `FuseProperty` array. Each `FuseProperty` is a struct containing a `value` (the name of the field which should be included in the search), and a `weight` (how much "weight" to assign to the score)
     ///
     /// # Example
     /// ```no_run
@@ -747,7 +747,7 @@ impl Fuse {
                                     &property.value
                                 )
                             });
-                            if let Some(result) = self.search((*pattern_ref).as_ref(), &value) {
+                            if let Some(result) = self.search((*pattern_ref).as_ref(), value) {
                                 let weight = if (property.weight - 1.0).abs() < 0.00001 {
                                     1.0
                                 } else {

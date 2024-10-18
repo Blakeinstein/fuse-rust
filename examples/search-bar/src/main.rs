@@ -77,16 +77,14 @@ impl Example<'_> {
             }
         }
     }
-    
+
     fn view(&self) -> Element<Message> {
         let query_box = text_input("Search query:", &self.search_query)
             .id(INPUT_ID.clone())
-            .on_input(|input| 
-                Message::SearchQuery(input)
-            )
+            .on_input(|input| Message::SearchQuery(input))
             .padding(15)
             .size(16);
-    
+
         let books: Element<_> = column(match &self.visible_books {
             Some(books) => books
                 .iter()
@@ -102,7 +100,7 @@ impl Example<'_> {
         })
         .spacing(10)
         .into();
-    
+
         let content = column![
             query_box,
             scrollable(container(books).width(Length::Fill).padding(40)),
@@ -111,7 +109,7 @@ impl Example<'_> {
         .width(Length::Fill)
         .height(Length::Fill)
         .align_x(Alignment::Center);
-    
+
         container(content)
             .width(Length::Fill)
             .height(Length::Fill)
