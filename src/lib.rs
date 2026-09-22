@@ -519,7 +519,7 @@ impl Fuse {
             let value = item.lookup(&property.value).unwrap_or_else(|| {
                 panic!(
                     "Lookup Failed: Lookup doesnt contain requested value => {}.",
-                    &property.value
+                    property.value
                 );
             });
             if let Some(result) = self.search(pattern, value) {
