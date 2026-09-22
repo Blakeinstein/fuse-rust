@@ -1,4 +1,4 @@
-use iced::widget::{column, container, row, scrollable, text, text_input};
+use iced::widget::{column, container, row, scrollable, text, text_input, Id};
 use iced::{application, Alignment, Color, Element, Length};
 use once_cell::sync::Lazy;
 
@@ -32,10 +32,12 @@ const BOOKS: &'static [&'static str] = &[
     "Monster 1959",
 ];
 
-static INPUT_ID: Lazy<text_input::Id> = Lazy::new(text_input::Id::unique);
+static INPUT_ID: Lazy<Id> = Lazy::new(Id::unique);
 
 pub fn main() -> iced::Result {
-    application("Fuse-Rust search bar demo", Example::update, Example::view).run()
+    application(Example::default, Example::update, Example::view)
+        .title("Fuse-Rust search bar demo")
+        .run()
 }
 
 struct Example<'a> {
