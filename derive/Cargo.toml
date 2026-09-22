@@ -1,0 +1,23 @@
+[package]
+name = "fuse-rust-derive"
+version = "0.1.0"
+authors = ["Blaine <rishi1998@gmail.com>"]
+edition = "2021"
+license = "MIT"
+readme = "README.md"
+documentation = "https://docs.rs/fuse-rust-derive"
+repository = "https://github.com/Blakeinstein/fuse-rust"
+homepage = "https://github.com/Blakeinstein/fuse-rust"
+categories = ["algorithms", "text-processing"]
+keywords = ["derive", "macro", "search", "fuzzy-search", "fuse"]
+description = """
+Derive macro for the Fuseable trait from the fuse-rust crate.
+"""
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = "3"

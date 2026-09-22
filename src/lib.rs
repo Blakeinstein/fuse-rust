@@ -5,9 +5,41 @@
 //! A super lightweight fuzzy-search library.
 //! A port of [Fuse-Swift](https://github.com/krisk/fuse-swift) written purely in rust!
 
+// The derive macro refers to this crate by its public name, so that the code it
+// generates works both inside this crate and out in a dependent crate.
+#[cfg(feature = "derive")]
+extern crate self as fuse_rust;
+
 #[cfg(test)]
 mod tests;
 mod utils;
+
+/// Derives [`Fuseable`] for a struct with named fields.
+///
+/// Available when the `derive` feature is enabled. Mark each searchable field with
+/// `#[fuse]`, optionally giving it a weight; unmarked fields are ignored.
+///
+/// ```
+/// # use fuse_rust::{ Fuse, Fuseable };
+/// #[derive(Fuseable)]
+/// struct Book {
+///     #[fuse(weight = 0.3)]
+///     title: String,
+///     #[fuse(weight = 0.7)]
+///     author: String,
+///     isbn: u64, // not searched
+/// }
+///
+/// let books = [
+///     Book { title: "Old Man's War fiction".into(), author: "John X".into(), isbn: 1 },
+///     Book { title: "Right Ho Jeeves".into(), author: "P.D. Mans".into(), isbn: 2 },
+/// ];
+///
+/// let results = Fuse::default().search_text_in_fuse_list("man", &books);
+/// assert_eq!(results[0].index, 1);
+/// ```
+#[cfg(feature = "derive")]
+pub use fuse_rust_derive::Fuseable;
 
 #[cfg(feature = "async")]
 use crossbeam_utils::thread;
@@ -46,6 +78,7 @@ use std::ops::Range;
 ///     }
 /// }
 /// ```
+#[derive(Debug, PartialEq)]
 pub struct FuseProperty {
     /// The name of the field with an associated weight in the search.
     pub value: String,
@@ -435,7 +468,89 @@ pub trait Fuseable {
     fn lookup(&self, key: &str) -> Option<&str>;
 }
 
+impl<T: Fuseable + ?Sized> Fuseable for &T {
+    fn properties(&self) -> Vec<FuseProperty> {
+        (**self).properties()
+    }
+    fn lookup(&self, key: &str) -> Option<&str> {
+        (**self).lookup(key)
+    }
+}
+
+/// Search result that borrows the matched item, instead of referring to it by index.
+///
+/// Returned by the `search_text_in_fuseable_refs*` family. Prefer these over the
+/// index-based [`FuseableSearchResult`] when searching an unordered collection such
+/// as a [`std::collections::HashSet`] or [`std::collections::HashMap`], where a
+/// positional index is not a stable way to get back to the item.
+#[derive(Debug, PartialEq)]
+pub struct FuseableRefSearchResult<'a, T> {
+    /// The matched item itself, borrowed from the searched collection.
+    pub item: &'a T,
+    /// Position of the item in the iteration order of the collection that was searched.
+    ///
+    /// Only meaningful for collections with a defined order, such as a slice,
+    /// a [`Vec`] or a [`std::collections::BTreeMap`]. For a hash-based collection the
+    /// iteration order is unspecified, so use [`item`](Self::item) instead.
+    pub index: usize,
+    /// Overall score of the match, between `0.0` (exact match) and `1.0` (no match).
+    pub score: f64,
+    /// Per-property results, one entry for each property that matched.
+    pub results: Vec<FResult>,
+}
+
 impl Fuse {
+    /// Scores a single `Fuseable` item against an already-created pattern.
+    ///
+    /// This is the scoring core shared by every `Fuseable` search entry point, so that
+    /// the sequential, chunked and reference-returning variants cannot drift apart.
+    /// Returns `None` when no property of the item matched, otherwise the overall score
+    /// and the per-property results.
+    fn score_parts(
+        &self,
+        pattern: Option<&Pattern>,
+        item: &impl Fuseable,
+    ) -> Option<(f64, Vec<FResult>)> {
+        let mut total_score = 0.0;
+        let mut matched = 0usize;
+        let mut property_results = vec![];
+
+        for property in item.properties() {
+            let value = item.lookup(&property.value).unwrap_or_else(|| {
+                panic!(
+                    "Lookup Failed: Lookup doesnt contain requested value => {}.",
+                    property.value
+                );
+            });
+            if let Some(result) = self.search(pattern, value) {
+                let weight = if (property.weight - 1.0).abs() < 0.00001 {
+                    1.0
+                } else {
+                    1.0 - property.weight
+                };
+                let score = if result.score == 0.0 && (weight - 1.0).abs() < f64::EPSILON {
+                    0.001
+                } else {
+                    result.score
+                } * weight;
+                total_score += score;
+                matched += 1;
+
+                property_results.push(FResult {
+                    value: String::from(&property.value),
+                    score,
+                    ranges: result.ranges,
+                });
+            }
+        }
+
+        if matched == 0 {
+            return None;
+        }
+
+        Some((total_score / matched as f64, property_results))
+    }
+
     /// Searches for a text pattern in a given string.
     /// - Parameters:
     ///   - text: the text string to search for.
@@ -531,7 +646,7 @@ impl Fuse {
     ///             _ => None
     ///         }
     ///     }
-    /// }   
+    /// }
     /// let books = [
     ///     Book{author: "John X", title: "Old Man's War fiction"},
     ///     Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
@@ -547,53 +662,107 @@ impl Fuse {
         list: &[impl Fuseable],
     ) -> Vec<FuseableSearchResult> {
         let pattern = self.create_pattern(text);
-        let mut result = vec![];
-        for (index, item) in list.iter().enumerate() {
-            let mut scores = vec![];
-            let mut total_score = 0.0;
-
-            let mut property_results = vec![];
-            item.properties().iter().for_each(|property| {
-                let value = item.lookup(&property.value).unwrap_or_else(|| {
-                    panic!(
-                        "Lookup Failed: Lookup doesnt contain requested value => {}.",
-                        &property.value
-                    );
-                });
-                if let Some(result) = self.search(pattern.as_ref(), value) {
-                    let weight = if (property.weight - 1.0).abs() < 0.00001 {
-                        1.0
-                    } else {
-                        1.0 - property.weight
-                    };
-                    let score = if result.score == 0.0 && (weight - 1.0).abs() < f64::EPSILON {
-                        0.001
-                    } else {
-                        result.score
-                    } * weight;
-                    total_score += score;
-
-                    scores.push(score);
-
-                    property_results.push(FResult {
-                        value: String::from(&property.value),
+        let mut result: Vec<FuseableSearchResult> = list
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| {
+                self.score_parts(pattern.as_ref(), item)
+                    .map(|(score, results)| FuseableSearchResult {
+                        index,
                         score,
-                        ranges: result.ranges,
-                    });
-                }
-            });
-            if scores.is_empty() {
-                continue;
-            }
-
-            let count = scores.len() as f64;
-            result.push(FuseableSearchResult {
-                index,
-                score: total_score / count,
-                results: property_results,
+                        results,
+                    })
             })
-        }
+            .collect();
 
+        result.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+        result
+    }
+
+    /// Searches for a text pattern across any iterable of `Fuseable` references.
+    ///
+    /// Unlike [`search_text_in_fuse_list`](Self::search_text_in_fuse_list), which needs a
+    /// contiguous slice, this accepts anything that iterates over references. That makes it
+    /// usable directly with a [`std::collections::HashSet`], the values of a
+    /// [`std::collections::HashMap`], a [`std::collections::BTreeMap`], or a plain
+    /// [`Vec`] — with no intermediate copy of the collection.
+    ///
+    /// Each result borrows the matched item, so there is no need to map an index back to
+    /// the original collection. This matters for hash-based collections, whose iteration
+    /// order is unspecified.
+    ///
+    /// - Parameters:
+    ///   - text: The pattern string to search for
+    ///   - list: Anything iterable yielding `&T`, where `T` (or `&T`) implements `Fuseable`
+    /// - Returns: A list of [`FuseableRefSearchResult`], sorted best match first.
+    ///
+    /// # Example
+    /// ```
+    /// # use fuse_rust::{ Fuse, Fuseable, FuseProperty };
+    /// use std::collections::HashSet;
+    ///
+    /// #[derive(PartialEq, Eq, Hash)]
+    /// struct Book {
+    ///     title: String,
+    ///     author: String,
+    /// }
+    ///
+    /// impl Fuseable for Book {
+    ///     fn properties(&self) -> Vec<FuseProperty> {
+    ///         vec![
+    ///             FuseProperty { value: String::from("title"), weight: 0.3 },
+    ///             FuseProperty { value: String::from("author"), weight: 0.7 },
+    ///         ]
+    ///     }
+    ///
+    ///     fn lookup(&self, key: &str) -> Option<&str> {
+    ///         match key {
+    ///             "title" => Some(&self.title),
+    ///             "author" => Some(&self.author),
+    ///             _ => None,
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let mut books = HashSet::new();
+    /// books.insert(Book { title: "Old Man's War fiction".into(), author: "John X".into() });
+    /// books.insert(Book { title: "Right Ho Jeeves".into(), author: "P.D. Mans".into() });
+    ///
+    /// let fuse = Fuse::default();
+    /// let results = fuse.search_text_in_fuseable_refs("man", &books);
+    ///
+    /// // Results borrow the matched books directly out of the set.
+    /// assert_eq!(results.len(), 2);
+    /// assert_eq!(results[0].item.author, "P.D. Mans");
+    /// ```
+    ///
+    /// Note that this only accepts iterators of references, because the results borrow from
+    /// the collection. A by-value iterator such as `vec.into_iter()` is rejected at compile
+    /// time; use [`search_text_in_fuse_list`](Self::search_text_in_fuse_list) for owned data.
+    pub fn search_text_in_fuseable_refs<'a, It, T>(
+        &self,
+        text: &str,
+        list: It,
+    ) -> Vec<FuseableRefSearchResult<'a, T>>
+    where
+        It: IntoIterator<Item = &'a T>,
+        &'a T: Fuseable,
+        T: 'a,
+    {
+        let pattern = self.create_pattern(text);
+        let mut result: Vec<_> = list
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, item)| {
+                self.score_parts(pattern.as_ref(), &item)
+                    .map(|(score, results)| FuseableRefSearchResult {
+                        item,
+                        index,
+                        score,
+                        results,
+                    })
+            })
+            .collect();
         result.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
         result
     }
@@ -702,7 +871,7 @@ impl Fuse {
     ///             _ => None
     ///         }
     ///     }
-    /// }    
+    /// }
     /// let books = [
     ///     Book{author: "John X", title: "Old Man's War fiction"},
     ///     Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
@@ -735,48 +904,16 @@ impl Fuse {
                 scope.spawn(move |_| {
                     let mut chunk_items = vec![];
 
-                    for (index, item) in chunk.iter().enumerate() {
-                        let mut scores = vec![];
-                        let mut total_score = 0.0;
-
-                        let mut property_results = vec![];
-                        item.properties().iter().for_each(|property| {
-                            let value = item.lookup(&property.value).unwrap_or_else(|| {
-                                panic!(
-                                    "Lookup doesnt contain requested value => {}.",
-                                    &property.value
-                                )
-                            });
-                            if let Some(result) = self.search((*pattern_ref).as_ref(), value) {
-                                let weight = if (property.weight - 1.0).abs() < 0.00001 {
-                                    1.0
-                                } else {
-                                    1.0 - property.weight
-                                };
-                                // let score = if result.score == 0.0 && weight == 1.0 { 0.001 } else { result.score } * weight;
-                                let score = result.score * weight;
-                                total_score += score;
-
-                                scores.push(score);
-
-                                property_results.push(FResult {
-                                    value: String::from(&property.value),
-                                    score,
-                                    ranges: result.ranges,
-                                });
-                            }
-                        });
-
-                        if scores.is_empty() {
-                            continue;
+                    for (chunk_index, item) in chunk.iter().enumerate() {
+                        if let Some((score, results)) =
+                            self.score_parts((*pattern_ref).as_ref(), item)
+                        {
+                            chunk_items.push(FuseableSearchResult {
+                                index: offset + chunk_index,
+                                score,
+                                results,
+                            })
                         }
-
-                        let count = scores.len() as f64;
-                        chunk_items.push(FuseableSearchResult {
-                            index,
-                            score: total_score / count,
-                            results: property_results,
-                        })
                     }
 
                     let mut inner_ref = queue_ref.lock().unwrap();
@@ -795,6 +932,101 @@ impl Fuse {
             .unwrap();
         items.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
         completion(items);
+    }
+
+    /// Searches, in parallel, for a text pattern across any iterable of `Fuseable` references.
+    ///
+    /// The rayon counterpart of
+    /// [`search_text_in_fuseable_refs`](Self::search_text_in_fuseable_refs): it accepts the
+    /// same borrowing iterables — a [`std::collections::HashSet`], the values of a
+    /// [`std::collections::HashMap`], a [`Vec`] — and hands each result back holding a
+    /// reference to the matched item.
+    ///
+    /// - Parameters:
+    ///   - text: The pattern string to search for
+    ///   - list: Anything iterable yielding `&T`, where `T` (or `&T`) implements `Fuseable`
+    ///   - chunk_size: Minimum number of items handed to a single rayon task. Larger values
+    ///     reduce scheduling overhead for cheap comparisons. A value of `0` is treated as `1`.
+    ///   - completion: Handler executed with the sorted results once the search finishes
+    ///
+    /// The references are gathered into a temporary `Vec` so the work can be split across
+    /// threads; this copies pointers only, never the items themselves.
+    ///
+    /// # Example
+    /// ```
+    /// # use fuse_rust::{ Fuse, Fuseable, FuseProperty, FuseableRefSearchResult };
+    /// use std::collections::HashSet;
+    ///
+    /// #[derive(PartialEq, Eq, Hash)]
+    /// struct Book {
+    ///     title: String,
+    ///     author: String,
+    /// }
+    ///
+    /// impl Fuseable for Book {
+    ///     fn properties(&self) -> Vec<FuseProperty> {
+    ///         vec![
+    ///             FuseProperty { value: String::from("title"), weight: 0.3 },
+    ///             FuseProperty { value: String::from("author"), weight: 0.7 },
+    ///         ]
+    ///     }
+    ///
+    ///     fn lookup(&self, key: &str) -> Option<&str> {
+    ///         match key {
+    ///             "title" => Some(&self.title),
+    ///             "author" => Some(&self.author),
+    ///             _ => None,
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let mut books = HashSet::new();
+    /// books.insert(Book { title: "Old Man's War fiction".into(), author: "John X".into() });
+    /// books.insert(Book { title: "Right Ho Jeeves".into(), author: "P.D. Mans".into() });
+    ///
+    /// let fuse = Fuse::default();
+    /// fuse.search_text_in_fuseable_refs_with_chunk_size_rayon(
+    ///     "man",
+    ///     &books,
+    ///     1,
+    ///     &|results: Vec<FuseableRefSearchResult<Book>>| {
+    ///         assert_eq!(results[0].item.author, "P.D. Mans");
+    ///     },
+    /// );
+    /// ```
+    pub fn search_text_in_fuseable_refs_with_chunk_size_rayon<'a, It, T>(
+        &self,
+        text: &str,
+        list: It,
+        chunk_size: usize,
+        completion: &dyn Fn(Vec<FuseableRefSearchResult<'a, T>>),
+    ) where
+        It: IntoIterator<Item = &'a T>,
+        &'a T: Fuseable,
+        T: Sync + 'a,
+    {
+        use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+
+        let pattern = self.create_pattern(text);
+        let items: Vec<&'a T> = list.into_iter().collect();
+
+        let mut result: Vec<FuseableRefSearchResult<'a, T>> = items
+            .par_iter()
+            .enumerate()
+            .with_min_len(chunk_size.max(1))
+            .filter_map(|(index, item)| {
+                self.score_parts(pattern.as_ref(), item)
+                    .map(|(score, results)| FuseableRefSearchResult {
+                        item: *item,
+                        index,
+                        score,
+                        results,
+                    })
+            })
+            .collect();
+
+        result.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+        completion(result);
     }
 }
 
@@ -876,6 +1108,7 @@ impl Fuse {
     ///   - list: A list of `Fuseable` objects, i.e. structs implementing the Fuseable trait in which to search
     ///   - chunkSize: The size of a single chunk of the array. For example, if the array has `1000` items, it may be useful to split the work into 10 chunks of 100. This should ideally speed up the search logic. Defaults to `100`.
     ///   - completion: The handler which is executed upon completion
+    ///
     /// Each `Fuseable` object contains a `properties` method which returns `FuseProperty` array. Each `FuseProperty` is a struct containing a `value` (the name of the field which should be included in the search), and a `weight` (how much "weight" to assign to the score)
     ///
     /// # Example
@@ -902,7 +1135,7 @@ impl Fuse {
     ///             _ => None
     ///         }
     ///     }
-    /// }    
+    /// }
     /// let books = [
     ///     Book{author: "John X", title: "Old Man's War fiction"},
     ///     Book{author: "P.D. Mans", title: "Right Ho Jeeves"},
@@ -935,48 +1168,16 @@ impl Fuse {
                 scope.spawn(move |_| {
                     let mut chunk_items = vec![];
 
-                    for (index, item) in chunk.iter().enumerate() {
-                        let mut scores = vec![];
-                        let mut total_score = 0.0;
-
-                        let mut property_results = vec![];
-                        item.properties().iter().for_each(|property| {
-                            let value = item.lookup(&property.value).unwrap_or_else(|| {
-                                panic!(
-                                    "Lookup doesnt contain requested value => {}.",
-                                    &property.value
-                                )
-                            });
-                            if let Some(result) = self.search((*pattern_ref).as_ref(), &value) {
-                                let weight = if (property.weight - 1.0).abs() < 0.00001 {
-                                    1.0
-                                } else {
-                                    1.0 - property.weight
-                                };
-                                // let score = if result.score == 0.0 && weight == 1.0 { 0.001 } else { result.score } * weight;
-                                let score = result.score * weight;
-                                total_score += score;
-
-                                scores.push(score);
-
-                                property_results.push(FResult {
-                                    value: String::from(&property.value),
-                                    score,
-                                    ranges: result.ranges,
-                                });
-                            }
-                        });
-
-                        if scores.is_empty() {
-                            continue;
+                    for (chunk_index, item) in chunk.iter().enumerate() {
+                        if let Some((score, results)) =
+                            self.score_parts((*pattern_ref).as_ref(), item)
+                        {
+                            chunk_items.push(FuseableSearchResult {
+                                index: offset + chunk_index,
+                                score,
+                                results,
+                            })
                         }
-
-                        let count = scores.len() as f64;
-                        chunk_items.push(FuseableSearchResult {
-                            index,
-                            score: total_score / count,
-                            results: property_results,
-                        })
                     }
 
                     let mut inner_ref = queue_ref.lock().unwrap();
@@ -996,5 +1197,124 @@ impl Fuse {
             .unwrap();
         items.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
         completion(items);
+    }
+
+    /// Asynchronously searches for a text pattern across any iterable of `Fuseable` references.
+    ///
+    /// The scoped-thread counterpart of
+    /// [`search_text_in_fuseable_refs`](Self::search_text_in_fuseable_refs): it accepts the
+    /// same borrowing iterables — a [`std::collections::HashSet`], the values of a
+    /// [`std::collections::HashMap`], a [`Vec`] — and hands each result back holding a
+    /// reference to the matched item.
+    ///
+    /// - Parameters:
+    ///   - text: The pattern string to search for
+    ///   - list: Anything iterable yielding `&T`, where `T` (or `&T`) implements `Fuseable`
+    ///   - chunk_size: Number of items handed to a single worker thread. For example, with
+    ///     `1000` items it may be useful to use a chunk size of `100`, spawning 10 workers.
+    ///     A value of `0` is treated as `1`.
+    ///   - completion: Handler executed with the sorted results once the search finishes
+    ///
+    /// The references are gathered into a temporary `Vec` so the work can be split across
+    /// threads; this copies pointers only, never the items themselves.
+    ///
+    /// # Example
+    /// ```
+    /// # use fuse_rust::{ Fuse, Fuseable, FuseProperty, FuseableRefSearchResult };
+    /// use std::collections::HashSet;
+    ///
+    /// #[derive(PartialEq, Eq, Hash)]
+    /// struct Book {
+    ///     title: String,
+    ///     author: String,
+    /// }
+    ///
+    /// impl Fuseable for Book {
+    ///     fn properties(&self) -> Vec<FuseProperty> {
+    ///         vec![
+    ///             FuseProperty { value: String::from("title"), weight: 0.3 },
+    ///             FuseProperty { value: String::from("author"), weight: 0.7 },
+    ///         ]
+    ///     }
+    ///
+    ///     fn lookup(&self, key: &str) -> Option<&str> {
+    ///         match key {
+    ///             "title" => Some(&self.title),
+    ///             "author" => Some(&self.author),
+    ///             _ => None,
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let mut books = HashSet::new();
+    /// books.insert(Book { title: "Old Man's War fiction".into(), author: "John X".into() });
+    /// books.insert(Book { title: "Right Ho Jeeves".into(), author: "P.D. Mans".into() });
+    ///
+    /// let fuse = Fuse::default();
+    /// fuse.search_text_in_fuseable_refs_with_chunk_size(
+    ///     "man",
+    ///     &books,
+    ///     1,
+    ///     &|results: Vec<FuseableRefSearchResult<Book>>| {
+    ///         assert_eq!(results[0].item.author, "P.D. Mans");
+    ///     },
+    /// );
+    /// ```
+    pub fn search_text_in_fuseable_refs_with_chunk_size<'a, It, T>(
+        &self,
+        text: &str,
+        list: It,
+        chunk_size: usize,
+        completion: &dyn Fn(Vec<FuseableRefSearchResult<'a, T>>),
+    ) where
+        It: IntoIterator<Item = &'a T>,
+        &'a T: Fuseable,
+        T: Sync + 'a,
+    {
+        let chunk_size = chunk_size.max(1);
+        let pattern = Arc::new(self.create_pattern(text));
+
+        let items: Vec<&'a T> = list.into_iter().collect();
+        let count = items.len();
+        let item_queue = Arc::new(Mutex::new(Some(vec![])));
+
+        thread::scope(|scope| {
+            (0..count).step_by(chunk_size).for_each(|offset| {
+                let chunk = &items[offset..count.min(offset + chunk_size)];
+                let queue_ref = Arc::clone(&item_queue);
+                let pattern_ref = Arc::clone(&pattern);
+                scope.spawn(move |_| {
+                    let mut chunk_items = vec![];
+
+                    for (chunk_index, item) in chunk.iter().enumerate() {
+                        if let Some((score, results)) =
+                            self.score_parts((*pattern_ref).as_ref(), item)
+                        {
+                            chunk_items.push(FuseableRefSearchResult {
+                                item: *item,
+                                index: offset + chunk_index,
+                                score,
+                                results,
+                            })
+                        }
+                    }
+
+                    let mut inner_ref = queue_ref.lock().unwrap();
+                    if let Some(item_queue) = inner_ref.as_mut() {
+                        item_queue.append(&mut chunk_items);
+                    }
+                });
+            });
+        })
+        .unwrap();
+
+        let mut result: Vec<FuseableRefSearchResult<'a, T>> = Arc::try_unwrap(item_queue)
+            .ok()
+            .unwrap()
+            .into_inner()
+            .unwrap()
+            .unwrap();
+        result.sort_unstable_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+        completion(result);
     }
 }

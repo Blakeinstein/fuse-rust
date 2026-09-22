@@ -28,6 +28,29 @@ Use the feature flag "async" to also be able to use async functions.
 fuse-rust = { version = ..., features = ["async"]}
 ```
 
+### Derive
+Use the feature flag "derive" to derive `Fuseable` instead of writing the impl by hand.
+```toml
+fuse-rust = { version = ..., features = ["derive"]}
+```
+
+Mark each searchable field with `#[fuse]`; unmarked fields are ignored, so a struct may
+hold ids, counts or anything else non-textual.
+```rust
+use fuse_rust::{Fuse, Fuseable};
+
+#[derive(Fuseable)]
+struct Book {
+    #[fuse(weight = 0.3)]
+    title: String,
+    #[fuse(weight = 0.7)]
+    author: String,
+    isbn: u64, // not searched
+}
+```
+A bare `#[fuse]` uses the default weight of `1.0`. See
+[the derive crate](/derive/) for the full rules.
+
 #### Initializing
 
 The first step is to create a fuse object, with the necessary parameters. Fuse::default, returns the following parameters.

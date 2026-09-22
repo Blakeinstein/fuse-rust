@@ -1,6 +1,6 @@
 [package]
 name = "fuse-rust"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Blaine <rishi1998@gmail.com>"]
 edition = "2021"
 license = "MIT"
@@ -23,15 +23,17 @@ Fuse-Rust is a port of Fuse-Swift, written purely in rust.
 
 [dependencies]
 crossbeam-utils = { version = "0.8", optional = true }
+fuse-rust-derive = { version = "0.1.0", path = "derive", optional = true }
 rayon = { version = "1", optional = true }
 
 [features]
 default = ["rayon"]
 async = ["crossbeam-utils"]
+derive = ["dep:fuse-rust-derive"]
 rayon = ["dep:rayon"]
 
 [workspace]
-members = ["examples/search-bar"]
+members = ["derive", "examples/search-bar"]
 
 [[example]]
 name = "chunk-search"
@@ -40,3 +42,7 @@ required-features = ["async"]
 [[example]]
 name = "chunk-search-rayon"
 required-features = ["rayon"]
+
+[[example]]
+name = "derive-search"
+required-features = ["derive"]
