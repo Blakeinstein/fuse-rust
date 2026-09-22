@@ -383,3 +383,145 @@ fn fuseable_refs_async_handles_empty_input() {
         assert!(results.is_empty());
     });
 }
+
+#[cfg(feature = "derive")]
+mod derive {
+    use crate::{FuseProperty, Fuseable};
+
+    #[derive(Fuseable)]
+    struct Derived {
+        #[fuse(weight = 0.3)]
+        title: String,
+        #[fuse(weight = 0.7)]
+        author: String,
+        #[allow(dead_code)]
+        isbn: u64,
+    }
+
+    #[derive(Fuseable)]
+    struct DefaultWeight {
+        #[fuse]
+        name: String,
+    }
+
+    #[derive(Fuseable)]
+    struct Borrowed<'a> {
+        #[fuse]
+        text: &'a str,
+    }
+
+    fn derived() -> Derived {
+        Derived {
+            title: String::from("Old Man's War fiction"),
+            author: String::from("John X"),
+            isbn: 12345,
+        }
+    }
+
+    #[test]
+    fn generates_the_expected_properties() {
+        assert_eq!(
+            derived().properties(),
+            vec![
+                FuseProperty {
+                    value: String::from("title"),
+                    weight: 0.3,
+                },
+                FuseProperty {
+                    value: String::from("author"),
+                    weight: 0.7,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn lookup_resolves_marked_fields() {
+        let item = derived();
+
+        assert_eq!(item.lookup("title"), Some("Old Man's War fiction"));
+        assert_eq!(item.lookup("author"), Some("John X"));
+    }
+
+    #[test]
+    fn unmarked_fields_are_not_exposed() {
+        let item = derived();
+
+        // `isbn` carries no `#[fuse]`, so it is neither a property nor looked up.
+        assert!(item.properties().iter().all(|p| p.value != "isbn"));
+        assert_eq!(item.lookup("isbn"), None);
+        assert_eq!(item.lookup("nonexistent"), None);
+    }
+
+    #[test]
+    fn bare_attribute_defaults_to_full_weight() {
+        let item = DefaultWeight {
+            name: String::from("fiction"),
+        };
+
+        assert_eq!(
+            item.properties(),
+            vec![FuseProperty {
+                value: String::from("name"),
+                weight: 1.0,
+            }]
+        );
+    }
+
+    #[test]
+    fn supports_borrowed_fields_and_lifetimes() {
+        let item = Borrowed {
+            text: "Not all those who wander are lost",
+        };
+
+        assert_eq!(
+            item.lookup("text"),
+            Some("Not all those who wander are lost")
+        );
+    }
+
+    #[test]
+    fn scores_identically_to_a_handwritten_impl() {
+        use crate::Fuse;
+
+        struct Manual {
+            title: String,
+            author: String,
+        }
+
+        impl Fuseable for Manual {
+            fn properties(&self) -> Vec<FuseProperty> {
+                vec![
+                    FuseProperty {
+                        value: String::from("title"),
+                        weight: 0.3,
+                    },
+                    FuseProperty {
+                        value: String::from("author"),
+                        weight: 0.7,
+                    },
+                ]
+            }
+
+            fn lookup(&self, key: &str) -> Option<&str> {
+                match key {
+                    "title" => Some(&self.title),
+                    "author" => Some(&self.author),
+                    _ => None,
+                }
+            }
+        }
+
+        let fuse = Fuse::default();
+        let derived_list = [derived()];
+        let manual_list = [Manual {
+            title: String::from("Old Man's War fiction"),
+            author: String::from("John X"),
+        }];
+
+        assert_eq!(
+            fuse.search_text_in_fuse_list("man", &derived_list),
+            fuse.search_text_in_fuse_list("man", &manual_list)
+        );
+    }
+}

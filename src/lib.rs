@@ -5,9 +5,41 @@
 //! A super lightweight fuzzy-search library.
 //! A port of [Fuse-Swift](https://github.com/krisk/fuse-swift) written purely in rust!
 
+// The derive macro refers to this crate by its public name, so that the code it
+// generates works both inside this crate and out in a dependent crate.
+#[cfg(feature = "derive")]
+extern crate self as fuse_rust;
+
 #[cfg(test)]
 mod tests;
 mod utils;
+
+/// Derives [`Fuseable`] for a struct with named fields.
+///
+/// Available when the `derive` feature is enabled. Mark each searchable field with
+/// `#[fuse]`, optionally giving it a weight; unmarked fields are ignored.
+///
+/// ```
+/// # use fuse_rust::{ Fuse, Fuseable };
+/// #[derive(Fuseable)]
+/// struct Book {
+///     #[fuse(weight = 0.3)]
+///     title: String,
+///     #[fuse(weight = 0.7)]
+///     author: String,
+///     isbn: u64, // not searched
+/// }
+///
+/// let books = [
+///     Book { title: "Old Man's War fiction".into(), author: "John X".into(), isbn: 1 },
+///     Book { title: "Right Ho Jeeves".into(), author: "P.D. Mans".into(), isbn: 2 },
+/// ];
+///
+/// let results = Fuse::default().search_text_in_fuse_list("man", &books);
+/// assert_eq!(results[0].index, 1);
+/// ```
+#[cfg(feature = "derive")]
+pub use fuse_rust_derive::Fuseable;
 
 #[cfg(feature = "async")]
 use crossbeam_utils::thread;
@@ -46,6 +78,7 @@ use std::ops::Range;
 ///     }
 /// }
 /// ```
+#[derive(Debug, PartialEq)]
 pub struct FuseProperty {
     /// The name of the field with an associated weight in the search.
     pub value: String,

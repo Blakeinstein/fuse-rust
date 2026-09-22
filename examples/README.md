@@ -142,6 +142,37 @@ Currently, the chunk size is one, so the chunks of size 1 will be run on seperat
     });
 ```
 
+#### Derive search
+
+Derive `Fuseable` rather than implementing it by hand.
+```shell
+cargo run --example derive-search --features derive
+```
+
+```rust
+use fuse_rust::{Fuse, Fuseable};
+
+#[derive(Fuseable)]
+struct Book {
+    #[fuse(weight = 0.3)]
+    title: String,
+    #[fuse(weight = 0.7)]
+    author: String,
+    isbn: u64,      // no #[fuse], so it is not searched
+    page_count: u32,
+}
+
+let books = [
+    Book { title: "Old Man's War fiction".into(), author: "John X".into(), isbn: 1, page_count: 0 },
+    Book { title: "Right Ho Jeeves".into(), author: "P.D. Mans".into(), isbn: 2, page_count: 0 },
+];
+
+let results = Fuse::default().search_text_in_fuse_list("man", &books);
+```
+
+A bare `#[fuse]` gives the field the default weight of `1.0`. Lifetimes and `&str`
+fields are supported, and the generated impl scores identically to a handwritten one.
+
 #### Chunk search
 
 You can look into chunk-search.rs for the source code, and can run the same with:
